@@ -52,6 +52,6 @@ The application will use React Native state management to handle notes, folders,
 
 ## Repository / Shared Project Access
 This project will be submitted through:
-- GitHub Repository: [Insert link here]
+- GitHub Repository: https://github.com/AbhiDa-Dev/NoteFlow.git
 
 If needed, additional shared files and documentation will also be provided through a shared folder or ZIP submission with correct access permissions.
