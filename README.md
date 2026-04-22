@@ -47,8 +47,7 @@ The application uses **React Native state management** to handle the flow of inf
 * **React Native Gesture Handler** (For swipe-to-delete and native interactions)
 
 ## Repository / Shared Project Access
-This project will be submitted through:
-* **GitHub Repository:** [https://github.com/parthos/ball-knowledge.git](https://github.com/parthos/ball-knowledge.git)
+This project will be submitted through this gitHub
 
 ---
 
