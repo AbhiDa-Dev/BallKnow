@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "BallKnow",
+    "slug": "ballknow",
+    "version": "1.0.0",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.ballknow.app"
+    },
+    "android": {
+      "package": "com.ballknow.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

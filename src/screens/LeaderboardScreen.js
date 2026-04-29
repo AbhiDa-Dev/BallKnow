@@ -1,0 +1,308 @@
+/**
+ * Leaderboard Screen
+ * Displays all local players and games sorted by VORP or Points
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  StyleSheet,
+  View,
+  FlatList,
+  TouchableOpacity,
+  Text,
+  ActivityIndicator,
+  SafeAreaView,
+  RefreshControl,
+  Animated,
+  PanResponder,
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { getAllGames, deleteGame } from '../services/storageService';
+
+const SORT_MODES = {
+  VORP: 'vorp',
+  BPM: 'bpm',
+  POINTS: 'points',
+  TS: 'ts',
+};
+
+const LeaderboardScreen = () => {
+  const [games, setGames] = useState([]);
+  const [sortBy, setSortBy] = useState(SORT_MODES.VORP);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Load games on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      loadGames();
+    }, [])
+  );
+
+  const loadGames = async () => {
+    setLoading(true);
+    try {
+      const allGames = await getAllGames();
+      setGames(allGames);
+    } catch (error) {
+      console.error('Error loading games:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadGames();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleDeleteGame = async (gameId) => {
+    try {
+      await deleteGame(gameId);
+      await loadGames();
+    } catch (error) {
+      console.error('Error deleting game:', error);
+    }
+  };
+
+  const getSortedGames = () => {
+    const sorted = [...games];
+    switch (sortBy) {
+      case SORT_MODES.VORP:
+        return sorted.sort((a, b) => (b.metrics?.vorp || 0) - (a.metrics?.vorp || 0));
+      case SORT_MODES.BPM:
+        return sorted.sort((a, b) => (b.metrics?.bpm || 0) - (a.metrics?.bpm || 0));
+      case SORT_MODES.POINTS:
+        return sorted.sort((a, b) => (b.stats?.pts || 0) - (a.stats?.pts || 0));
+      case SORT_MODES.TS:
+        return sorted.sort((a, b) => (b.metrics?.ts || 0) - (a.metrics?.ts || 0));
+      default:
+        return sorted;
+    }
+  };
+
+  const sortedGames = getSortedGames();
+
+  const GameCard = ({ game, index }) => (
+    <Animated.View style={styles.gameCard}>
+      <View style={styles.cardContent}>
+        <View style={styles.rankBadge}>
+          <Text style={styles.rankText}>#{index + 1}</Text>
+        </View>
+        <View style={styles.playerInfo}>
+          <Text style={styles.playerName}>{game.playerName}</Text>
+          <Text style={styles.gameDate}>
+            {new Date(game.createdAt).toLocaleDateString()} at{' '}
+            {game.location || 'Unknown'}
+          </Text>
+        </View>
+        <View style={styles.metricsContainer}>
+          <MetricBox label="VORP" value={game.metrics?.vorp || 0} highlight={sortBy === SORT_MODES.VORP} />
+          <MetricBox label="BPM" value={game.metrics?.bpm || 0} highlight={sortBy === SORT_MODES.BPM} />
+          <MetricBox label="TS%" value={game.metrics?.ts || 0} highlight={sortBy === SORT_MODES.TS} />
+          <MetricBox label="PTS" value={game.stats?.pts || 0} highlight={sortBy === SORT_MODES.POINTS} />
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => handleDeleteGame(game.id)}
+      >
+        <MaterialCommunityIcons name="delete" size={20} color="#ff6b6b" />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+
+  const MetricBox = ({ label, value, highlight }) => (
+    <View style={[styles.metricBox, highlight && styles.metricBoxHighlight]}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value.toFixed(1)}</Text>
+    </View>
+  );
+
+  const SortButton = ({ mode, label }) => (
+    <TouchableOpacity
+      style={[styles.sortButton, sortBy === mode && styles.sortButtonActive]}
+      onPress={() => setSortBy(mode)}
+    >
+      <Text
+        style={[
+          styles.sortButtonText,
+          sortBy === mode && styles.sortButtonTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  if (loading && !games.length) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color="#FFB81C" style={{ marginTop: 50 }} />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.sortContainer}>
+        <SortButton mode={SORT_MODES.VORP} label="VORP" />
+        <SortButton mode={SORT_MODES.BPM} label="BPM" />
+        <SortButton mode={SORT_MODES.TS} label="TS%" />
+        <SortButton mode={SORT_MODES.POINTS} label="PTS" />
+      </View>
+
+      {games.length === 0 ? (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="basketball" size={48} color="#666" />
+          <Text style={styles.emptyText}>No games logged yet</Text>
+          <Text style={styles.emptySubtext}>Start logging games to see your stats</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sortedGames}
+          renderItem={({ item, index }) => <GameCard game={item} index={index} />}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        />
+      )}
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0d0d0d',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    backgroundColor: '#1a1a1a',
+    borderBottomColor: '#333',
+    borderBottomWidth: 1,
+  },
+  sortButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  sortButtonActive: {
+    backgroundColor: '#FFB81C',
+    borderColor: '#FFB81C',
+  },
+  sortButtonText: {
+    textAlign: 'center',
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sortButtonTextActive: {
+    color: '#000',
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  gameCard: {
+    flexDirection: 'row',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderLeftColor: '#FFB81C',
+    borderLeftWidth: 4,
+  },
+  cardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rankBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFB81C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  rankText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#000',
+  },
+  playerInfo: {
+    flex: 1,
+  },
+  playerName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  gameDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  metricsContainer: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  metricBox: {
+    width: 45,
+    backgroundColor: '#0d0d0d',
+    borderRadius: 8,
+    padding: 6,
+    alignItems: 'center',
+  },
+  metricBoxHighlight: {
+    backgroundColor: '#FFB81C',
+    borderColor: '#FFB81C',
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: '#999',
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
+});
+
+export default LeaderboardScreen;
