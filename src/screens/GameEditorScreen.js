@@ -1,9 +1,9 @@
 /**
- * Game Editor Screen
- * Form for logging play-by-play stats during live games
+ * Game Editor Screen (Post-Game Stats)
+ * Simple interface to log completed games - select players and add stats
  */
 
-import React, { useState } from 'react';
+import React, { useState, useFocusEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -13,18 +13,19 @@ import {
   TextInput,
   SafeAreaView,
   Alert,
+  Modal,
+  FlatList,
   ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { saveGame } from '../services/storageService';
-import { validateGameStats } from '../utils/analyticsEngine';
+import { saveGame, getAllGames } from '../services/storageService';
 
 const STAT_FIELDS = [
   { key: 'min', label: 'Minutes Played', category: 'basic' },
   { key: 'fgm', label: 'Field Goals Made', category: 'shooting' },
   { key: 'fga', label: 'Field Goals Attempted', category: 'shooting' },
-  { key: 'threepm', label: '3PM', category: 'shooting' },
-  { key: 'threeepa', label: '3PA', category: 'shooting' },
+  { key: 'threepm', label: '3-Pointers Made', category: 'shooting' },
+  { key: 'threeepa', label: '3-Pointers Attempted', category: 'shooting' },
   { key: 'ftm', label: 'Free Throws Made', category: 'shooting' },
   { key: 'fta', label: 'Free Throws Attempted', category: 'shooting' },
   { key: 'orb', label: 'Offensive Rebounds', category: 'rebounding' },
@@ -37,84 +38,158 @@ const STAT_FIELDS = [
 ];
 
 const GameEditorScreen = ({ navigation }) => {
-  const [playerName, setPlayerName] = useState('');
   const [location, setLocation] = useState('');
-  const [stats, setStats] = useState({});
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [selectedPlayerForEdit, setSelectedPlayerForEdit] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [playerStats, setPlayerStats] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const updateStat = (key, value) => {
-    const numValue = value === '' ? 0 : parseInt(value, 10) || 0;
-    setStats({ ...stats, [key]: numValue });
+  // Load unique player names from existing games
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPlayerNames();
+    }, [])
+  );
+
+  const loadPlayerNames = async () => {
+    try {
+      const games = await getAllGames();
+      const uniquePlayers = [...new Set(games.map((g) => g.playerName))];
+      setAllPlayers(uniquePlayers.sort());
+    } catch (error) {
+      console.error('Error loading players:', error);
+    }
   };
 
-  const calculatePTS = () => {
+  const togglePlayerSelection = (playerName) => {
+    if (selectedPlayers.includes(playerName)) {
+      setSelectedPlayers(selectedPlayers.filter((p) => p !== playerName));
+      const newStats = { ...playerStats };
+      delete newStats[playerName];
+      setPlayerStats(newStats);
+    } else {
+      setSelectedPlayers([...selectedPlayers, playerName]);
+      setPlayerStats({
+        ...playerStats,
+        [playerName]: {
+          min: 0,
+          fgm: 0,
+          fga: 0,
+          threepm: 0,
+          threeepa: 0,
+          ftm: 0,
+          fta: 0,
+          orb: 0,
+          drb: 0,
+          ast: 0,
+          stl: 0,
+          blk: 0,
+          tov: 0,
+          pf: 0,
+        },
+      });
+    }
+  };
+
+  const openEditModal = (playerName) => {
+    setSelectedPlayerForEdit(playerName);
+    setEditModalVisible(true);
+  };
+
+  const updatePlayerStat = (playerName, key, value) => {
+    const numValue = value === '' ? 0 : parseInt(value, 10) || 0;
+    setPlayerStats({
+      ...playerStats,
+      [playerName]: {
+        ...playerStats[playerName],
+        [key]: numValue,
+      },
+    });
+  };
+
+  const calculatePTS = (stats) => {
     const ftm = stats.ftm || 0;
     const fgm = stats.fgm || 0;
     const threepm = stats.threepm || 0;
     return fgm * 2 - threepm + ftm;
   };
 
-  const handleSaveGame = async () => {
-    if (!playerName.trim()) {
-      Alert.alert('Error', 'Please enter player name');
+  const getStatSummary = (playerName) => {
+    const stats = playerStats[playerName];
+    if (!stats) return '';
+    const pts = calculatePTS(stats);
+    const reb = (stats.orb || 0) + (stats.drb || 0);
+    return `${pts} pts | ${reb} reb | ${stats.ast || 0} ast`;
+  };
+
+  const handleSaveAllGames = async () => {
+    if (!location.trim()) {
+      Alert.alert('Error', 'Please enter game location');
       return;
     }
 
-    const gameStats = {
-      ...stats,
-      pts: calculatePTS(),
-    };
-
-    const validation = validateGameStats(gameStats);
-    if (!validation.valid) {
-      Alert.alert('Error', `Missing required stat: ${validation.missing}`);
+    if (selectedPlayers.length === 0) {
+      Alert.alert('Error', 'Please select at least one player');
       return;
     }
 
     setLoading(true);
-    try {
-      await saveGame({
-        playerName: playerName.trim(),
-        location: location.trim() || 'Unknown',
-        stats: gameStats,
-        teamStats: {
-          possessions: 100, // Default possession estimate
-        },
-      });
+    let saved = 0;
+    let failed = 0;
 
-      Alert.alert('Success', 'Game logged successfully!', [
-        {
-          text: 'Log Another',
-          onPress: () => {
-            setPlayerName('');
-            setLocation('');
-            setStats({});
+    try {
+      for (const playerName of selectedPlayers) {
+        const stats = playerStats[playerName];
+        const gameStats = {
+          ...stats,
+          pts: calculatePTS(stats),
+        };
+
+        try {
+          await saveGame({
+            playerName,
+            location: location.trim(),
+            stats: gameStats,
+            teamStats: { possessions: 100 },
+          });
+          saved++;
+        } catch (error) {
+          failed++;
+          console.error(`Failed to save ${playerName}:`, error);
+        }
+      }
+
+      Alert.alert(
+        'Games Saved',
+        `${saved} game(s) saved${failed > 0 ? `, ${failed} failed` : ''}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setLocation('');
+              setSelectedPlayers([]);
+              setPlayerStats({});
+              navigation.navigate('Leaderboard');
+            },
           },
-        },
-        {
-          text: 'View Leaderboard',
-          onPress: () => navigation.navigate('Leaderboard'),
-        },
-      ]);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save game: ' + error.message);
+        ]
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClear = () => {
-    Alert.alert('Clear Form?', 'This will reset all stats.', [
+  const resetForm = () => {
+    Alert.alert('Reset Form?', 'This will clear all selections and stats.', [
+      { text: 'Cancel' },
       {
-        text: 'Cancel',
-        onPress: () => {},
-      },
-      {
-        text: 'Clear',
+        text: 'Reset',
         onPress: () => {
-          setPlayerName('');
           setLocation('');
-          setStats({});
+          setSelectedPlayers([]);
+          setPlayerStats({});
         },
         style: 'destructive',
       },
@@ -130,8 +205,10 @@ const GameEditorScreen = ({ navigation }) => {
         maxLength={3}
         placeholder="0"
         placeholderTextColor="#666"
-        value={String(stats[field.key] || '')}
-        onChangeText={(value) => updateStat(field.key, value)}
+        value={String(playerStats[selectedPlayerForEdit]?.[field.key] || '')}
+        onChangeText={(value) =>
+          updatePlayerStat(selectedPlayerForEdit, field.key, value)
+        }
       />
     </View>
   );
@@ -150,83 +227,163 @@ const GameEditorScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Player Info Section */}
-        <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>Player Info</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Location Section */}
+        <View style={styles.locationSection}>
+          <Text style={styles.sectionTitle}>Game Location</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="Player Name"
-            placeholderTextColor="#666"
-            value={playerName}
-            onChangeText={setPlayerName}
-          />
-          <TextInput
-            style={styles.textInput}
-            placeholder="Location (Gym, Court, etc.)"
+            style={styles.locationInput}
+            placeholder="Gym, Court, etc."
             placeholderTextColor="#666"
             value={location}
             onChangeText={setLocation}
           />
         </View>
 
-        {/* Basic Stats */}
-        <StatCategory category="basic" label="Basic Stats" />
-
-        {/* Shooting Stats */}
-        <StatCategory category="shooting" label="Shooting Stats" />
-
-        {/* Rebounding Stats */}
-        <StatCategory category="rebounding" label="Rebounding" />
-
-        {/* Playmaking Stats */}
-        <StatCategory category="playmaking" label="Playmaking" />
-
-        {/* Defense Stats */}
-        <StatCategory category="defense" label="Defense" />
-
-        {/* Discipline Stats */}
-        <StatCategory category="discipline" label="Discipline" />
-
-        {/* Calculated Stats Display */}
-        <View style={styles.calculatedStats}>
-          <Text style={styles.categoryTitle}>Calculated Stats</Text>
-          <View style={styles.statDisplayRow}>
-            <Text style={styles.statDisplayLabel}>Points (PTS)</Text>
-            <Text style={styles.statDisplayValue}>{calculatePTS()}</Text>
+        {/* Players Section */}
+        <View style={styles.playersSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Select Players</Text>
+            <Text style={styles.selectedCount}>
+              {selectedPlayers.length} selected
+            </Text>
           </View>
-          <Text style={styles.calculatedNote}>
-            Points calculated from: FGM×2 - 3PM + FTM
-          </Text>
+
+          {allPlayers.length === 0 ? (
+            <View style={styles.emptyState}>
+              <MaterialCommunityIcons name="account-multiple" size={32} color="#666" />
+              <Text style={styles.emptyStateText}>
+                No players yet. Use Live Tracker to record your first game.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={allPlayers}
+              keyExtractor={(item) => item}
+              scrollEnabled={false}
+              renderItem={({ item: playerName }) => {
+                const isSelected = selectedPlayers.includes(playerName);
+                return (
+                  <View key={playerName} style={styles.playerRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.playerButton,
+                        isSelected && styles.playerButtonSelected,
+                      ]}
+                      onPress={() => togglePlayerSelection(playerName)}
+                    >
+                      <MaterialCommunityIcons
+                        name={isSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        size={24}
+                        color={isSelected ? '#FFB81C' : '#666'}
+                      />
+                      <View style={styles.playerInfo}>
+                        <Text style={styles.playerName}>{playerName}</Text>
+                        {isSelected && (
+                          <Text style={styles.playerStats}>
+                            {getStatSummary(playerName)}
+                          </Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+
+                    {isSelected && (
+                      <TouchableOpacity
+                        style={styles.editButton}
+                        onPress={() => openEditModal(playerName)}
+                      >
+                        <MaterialCommunityIcons
+                          name="pencil"
+                          size={20}
+                          color="#FFB81C"
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              }}
+            />
+          )}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.button, styles.clearButton]}
-            onPress={handleClear}
-            disabled={loading}
-          >
-            <MaterialCommunityIcons name="restart" size={20} color="#ff6b6b" />
-            <Text style={styles.clearButtonText}>Clear Form</Text>
-          </TouchableOpacity>
+        {selectedPlayers.length > 0 && (
+          <>
+            {/* Action Buttons */}
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.button, styles.resetButton]}
+                onPress={resetForm}
+              >
+                <MaterialCommunityIcons name="restart" size={20} color="#ff6b6b" />
+                <Text style={styles.resetButtonText}>Clear</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.button, styles.saveButton, loading && styles.buttonDisabled]}
-            onPress={handleSaveGame}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#000" size={20} />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="check" size={20} color="#000" />
-                <Text style={styles.saveButtonText}>Save Game</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.saveButton,
+                  loading && styles.buttonDisabled,
+                ]}
+                onPress={handleSaveAllGames}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#000" size={20} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="check" size={20} color="#000" />
+                    <Text style={styles.saveButtonText}>Save Games</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </ScrollView>
+
+      {/* Edit Stats Modal */}
+      <Modal visible={editModalVisible} transparent animationType="slide">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit {selectedPlayerForEdit}</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <StatCategory category="basic" label="Basic Stats" />
+              <StatCategory category="shooting" label="Shooting Stats" />
+              <StatCategory category="rebounding" label="Rebounding" />
+              <StatCategory category="playmaking" label="Playmaking" />
+              <StatCategory category="defense" label="Defense" />
+              <StatCategory category="discipline" label="Discipline" />
+
+              {/* Calculated Stats Display */}
+              <View style={styles.calculatedStats}>
+                <Text style={styles.categoryTitle}>Calculated Stats</Text>
+                <View style={styles.statDisplayRow}>
+                  <Text style={styles.statDisplayLabel}>Points (PTS)</Text>
+                  <Text style={styles.statDisplayValue}>
+                    {calculatePTS(playerStats[selectedPlayerForEdit] || {})}
+                  </Text>
+                </View>
+                <Text style={styles.calculatedNote}>
+                  Points = FGM×2 - 3PM + FTM
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Done</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -240,30 +397,150 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  infoSection: {
+  locationSection: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#fff',
     marginBottom: 12,
   },
-  textInput: {
+  locationInput: {
     backgroundColor: '#1a1a1a',
     borderRadius: 8,
-    padding: 12,
+    padding: 14,
     color: '#fff',
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#333',
     fontSize: 16,
+  },
+  playersSection: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectedCount: {
+    color: '#FFB81C',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  emptyState: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  playerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+    gap: 12,
+  },
+  playerButtonSelected: {
+    borderColor: '#FFB81C',
+    backgroundColor: '#1f1f1f',
+  },
+  playerInfo: {
+    flex: 1,
+  },
+  playerName: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  playerStats: {
+    color: '#FFB81C',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  editButton: {
+    padding: 10,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  resetButton: {
+    backgroundColor: '#222',
+  },
+  resetButtonText: {
+    color: '#ff6b6b',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  saveButton: {
+    backgroundColor: '#FFB81C',
+  },
+  saveButtonText: {
+    color: '#000',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomColor: '#333',
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   categoryContainer: {
     marginBottom: 20,
   },
   categoryTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#FFB81C',
     marginBottom: 12,
@@ -301,57 +578,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    paddingVertical: 8,
   },
   statDisplayLabel: {
-    color: '#ccc',
-    fontSize: 14,
+    color: '#888',
+    fontSize: 12,
   },
   statDisplayValue: {
     color: '#FFB81C',
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
   },
   calculatedNote: {
     color: '#666',
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 8,
     fontStyle: 'italic',
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  button: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    paddingVertical: 14,
-    gap: 8,
-  },
-  clearButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#ff6b6b',
-  },
-  clearButtonText: {
-    color: '#ff6b6b',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  saveButton: {
+  modalCloseButton: {
     backgroundColor: '#FFB81C',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 32,
   },
-  saveButtonText: {
+  modalCloseButtonText: {
     color: '#000',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
 

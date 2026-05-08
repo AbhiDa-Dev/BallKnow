@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import GameEditorScreen from './src/screens/GameEditorScreen';
+import LiveGameTrackerScreen from './src/screens/LiveGameTrackerScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -50,6 +51,18 @@ export default function App() {
             tabBarLabel: 'Leaderboard',
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="podium" color={color} size={size} />
+            ),
+            headerShown: true,
+          }}
+        />
+        <Tab.Screen
+          name="LiveTracker"
+          component={LiveGameTrackerScreen}
+          options={{
+            title: 'Live Tracker',
+            tabBarLabel: 'Live Tracker',
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="basketball" color={color} size={size} />
             ),
             headerShown: true,
           }}
