@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { saveGame, getAllGames } from '../services/storageService';
+import { pushLog } from '../services/uiLogService';
 
 const STAT_FIELDS = [
   { key: 'min', label: 'Minutes Played', category: 'basic' },
@@ -113,7 +114,8 @@ const GameEditorScreen = ({ navigation }) => {
     const ftm = stats.ftm || 0;
     const fgm = stats.fgm || 0;
     const threepm = stats.threepm || 0;
-    return fgm * 2 - threepm + ftm;
+    const derivedTwoPM = Math.max(0, fgm - threepm);
+    return derivedTwoPM * 2 + threepm * 3 + ftm;
   };
 
   const getStatSummary = (playerName) => {
@@ -148,12 +150,14 @@ const GameEditorScreen = ({ navigation }) => {
         };
 
         try {
-          await saveGame({
+          const savedGame = await saveGame({
             playerName,
             location: location.trim(),
             stats: gameStats,
             teamStats: { possessions: 100 },
           });
+          console.log('GameEditor saved game:', savedGame.id, savedGame);
+          try { pushLog(`GameEditor saved: ${savedGame.id} ${playerName}`); } catch (e) {}
           saved++;
         } catch (error) {
           failed++;
@@ -370,7 +374,7 @@ const GameEditorScreen = ({ navigation }) => {
                   </Text>
                 </View>
                 <Text style={styles.calculatedNote}>
-                  Points = FGM×2 - 3PM + FTM
+                  Points = (FGM - 3PM)×2 + 3PM×3 + FTM
                 </Text>
               </View>
 

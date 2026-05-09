@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { saveGame } from '../services/storageService';
+import { pushLog, getLogs } from '../services/uiLogService';
 
 const LiveGameTrackerScreen = ({ navigation }) => {
   const [players, setPlayers] = useState([]);
@@ -26,13 +27,15 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [location, setLocation] = useState('');
-  const [minutes, setMinutes] = useState(0);
+  const [appLogs, setAppLogs] = useState(getLogs());
 
   // Default stat structure for a player
   const createEmptyStats = () => ({
-    fgm: 0,      // Field Goals Made
-    fga: 0,      // Field Goals Attempted
-    fgMissed: 0, // Shots Missed (tracked separately)
+    min: 0,      // Minutes Played (per player!)
+    fgm: 0,      // Total Field Goals Made (includes threes)
+    fga: 0,      // Total Field Goals Attempted (includes threes)
+    twopm: 0,    // 2-pointers made (explicit)
+    twopa: 0,    // 2-pointers attempted (explicit)
     threepm: 0,  // 3-Pointers Made
     threeepa: 0, // 3-Pointers Attempted
     ftm: 0,      // Free Throws Made
@@ -77,36 +80,100 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   };
 
   const updatePlayerStat = (playerId, statKey, value) => {
-    const updatedPlayers = players.map((p) => {
-      if (p.id === playerId) {
-        return {
-          ...p,
-          stats: { ...p.stats, [statKey]: value },
-        };
-      }
-      return p;
-    });
-    setPlayers(updatedPlayers);
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (p.id === playerId) {
+          return {
+            ...p,
+            stats: { ...p.stats, [statKey]: value },
+          };
+        }
+        return p;
+      })
+    );
   };
 
   const incrementPlayerStat = (playerId, statKey) => {
-    const player = players.find((p) => p.id === playerId);
-    if (player) {
-      updatePlayerStat(playerId, statKey, player.stats[statKey] + 1);
-    }
+    if (!playerId) return;
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (p.id === playerId) {
+          return {
+            ...p,
+            stats: { ...p.stats, [statKey]: (p.stats[statKey] || 0) + 1 },
+          };
+        }
+        return p;
+      })
+    );
   };
 
   const decrementPlayerStat = (playerId, statKey) => {
-    const player = players.find((p) => p.id === playerId);
-    if (player && player.stats[statKey] > 0) {
-      updatePlayerStat(playerId, statKey, player.stats[statKey] - 1);
-    }
+    if (!playerId) return;
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (p.id === playerId) {
+          const current = p.stats[statKey] || 0;
+          return {
+            ...p,
+            stats: { ...p.stats, [statKey]: current > 0 ? current - 1 : 0 },
+          };
+        }
+        return p;
+      })
+    );
   };
 
   const activePlayer = getActivePlayer();
 
-  const calculatePTS = (stats) => {
-    return stats.fgm * 2 - stats.threepm + stats.ftm;
+  const calculateTotalPTS = (stats) => {
+    // Derive 2P makes from total FGM minus 3PM to ensure PTS updates when FGM changes
+    const derivedTwoPM = Math.max(0, (stats.fgm || 0) - (stats.threepm || 0));
+    const threePM = stats.threepm || 0;
+    const ftm = stats.ftm || 0;
+    return derivedTwoPM * 2 + threePM * 3 + ftm;
+  };
+
+  // Centralized atomic shot handler to avoid race conditions
+  const handleShot = ({ playerId, shotType, made }) => {
+    if (!playerId) {
+      Alert.alert('Select Player', 'Please select a player first');
+      return;
+    }
+
+    setPlayers((prev) => {
+      return prev.map((p) => {
+        if (p.id !== playerId) return p;
+
+        const s = { ...p.stats };
+
+        if (shotType === 'two') {
+          // 2-pt
+          s.twopa = (s.twopa || 0) + 1;
+          s.fga = (s.fga || 0) + 1;
+          if (made) {
+            s.twopm = (s.twopm || 0) + 1;
+            s.fgm = (s.fgm || 0) + 1;
+          }
+        } else if (shotType === 'three') {
+          // 3-pt
+          s.threeepa = (s.threeepa || 0) + 1;
+          s.fga = (s.fga || 0) + 1;
+          if (made) {
+            s.threepm = (s.threepm || 0) + 1;
+            s.fgm = (s.fgm || 0) + 1;
+          }
+        } else if (shotType === 'ft') {
+          // free throw
+          s.fta = (s.fta || 0) + 1;
+          if (made) {
+            s.ftm = (s.ftm || 0) + 1;
+          }
+        }
+
+        return { ...p, stats: s };
+      });
+    });
   };
 
   const resetGame = () => {
@@ -117,7 +184,6 @@ const LiveGameTrackerScreen = ({ navigation }) => {
         onPress: () => {
           setPlayers([]);
           setActivePlayerId(null);
-          setMinutes(0);
           setLocation('');
         },
         style: 'destructive',
@@ -137,16 +203,18 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     try {
       const gameStats = {
         ...playerToSave.stats,
-        min: minutes,
-        pts: calculatePTS(playerToSave.stats),
+        pts: calculateTotalPTS(playerToSave.stats),
       };
 
-      await saveGame({
+      const savedGame = await saveGame({
         playerName: playerToSave.name,
         location: location.trim(),
         stats: gameStats,
         teamStats: { possessions: 100 },
       });
+      console.log('LiveTracker saved game:', savedGame.id, savedGame);
+      pushLog(`LiveTracker saved: ${savedGame.id} ${playerToSave.name}`);
+      setAppLogs(getLogs());
 
       Alert.alert('Success', `${playerToSave.name}'s game saved!`);
     } catch (error) {
@@ -167,16 +235,17 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       try {
         const gameStats = {
           ...player.stats,
-          min: minutes,
-          pts: calculatePTS(player.stats),
+          pts: calculateTotalPTS(player.stats),
         };
 
-        await saveGame({
+        const savedGame = await saveGame({
           playerName: player.name,
           location: location.trim(),
           stats: gameStats,
           teamStats: { possessions: 100 },
         });
+        pushLog(`LiveTracker saved: ${savedGame.id} ${player.name}`);
+        setAppLogs(getLogs());
         saved++;
       } catch (error) {
         failed++;
@@ -199,32 +268,42 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     );
   };
 
-  const ShotButton = ({ madeColor, missedColor }) => (
-    <View style={styles.shotButtonGroup}>
-      <TouchableOpacity
-        style={[styles.shotButton, { borderColor: madeColor }]}
-        onPress={() => {
-          incrementPlayerStat(activePlayerId, 'fgm');
-          incrementPlayerStat(activePlayerId, 'fga');
-        }}
-      >
-        <MaterialCommunityIcons name="check-circle" size={24} color={madeColor} />
-        <Text style={[styles.shotButtonLabel, { color: madeColor }]}>MAKE</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.shotButton, { borderColor: missedColor }]}
-        onPress={() => {
-          incrementPlayerStat(activePlayerId, 'fgMissed');
-          incrementPlayerStat(activePlayerId, 'fga');
-        }}
-      >
-        <MaterialCommunityIcons name="close-circle" size={24} color={missedColor} />
-        <Text style={[styles.shotButtonLabel, { color: missedColor }]}>MISS</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  // Flexible shot button that can track different stat keys
+  const ShotButton = ({ type }) => {
+    // type: 'two' | 'three' | 'ft'
+    const made = () => handleShot({ playerId: activePlayerId, shotType: type, made: true });
+    const missed = () => handleShot({ playerId: activePlayerId, shotType: type, made: false });
 
-  const ReboundButton = ({ label, offColor, defColor }) => (
+    const colors = {
+      two: { made: '#51cf66', miss: '#ff6b6b' },
+      three: { made: '#4c6ef5', miss: '#ff6b6b' },
+      ft: { made: '#51cf66', miss: '#ff6b6b' },
+    };
+
+    const madeColor = colors[type].made;
+    const missedColor = colors[type].miss;
+
+    return (
+      <View style={styles.shotButtonGroup}>
+        <TouchableOpacity
+          style={[styles.shotButton, { borderColor: madeColor }]}
+          onPress={made}
+        >
+          <MaterialCommunityIcons name="check-circle" size={24} color={madeColor} />
+          <Text style={[styles.shotButtonLabel, { color: madeColor }]}>MAKE</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.shotButton, { borderColor: missedColor }]}
+          onPress={missed}
+        >
+          <MaterialCommunityIcons name="close-circle" size={24} color={missedColor} />
+          <Text style={[styles.shotButtonLabel, { color: missedColor }]}>MISS</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const ReboundButton = ({ offColor, defColor }) => (
     <View style={styles.reboundButtonGroup}>
       <TouchableOpacity
         style={[styles.reboundButton, { borderColor: offColor }]}
@@ -335,7 +414,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
             >
               <Text style={styles.playerCardName}>{player.name}</Text>
               <Text style={styles.playerCardPoints}>
-                {calculatePTS(player.stats)} pts
+                {calculateTotalPTS(player.stats)} pts
               </Text>
             </TouchableOpacity>
           ))}
@@ -354,11 +433,29 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       <View style={styles.statsHeader}>
         <View style={styles.headerStat}>
           <Text style={styles.headerStatLabel}>MIN</Text>
-          <Text style={styles.headerStatValue}>{minutes}</Text>
+          <Text style={styles.headerStatValue}>{activePlayer.stats.min}</Text>
+          <View style={styles.headerStatButtons}>
+            <TouchableOpacity
+              onPress={() => decrementPlayerStat(activePlayerId, 'min')}
+              style={styles.smallButton}
+            >
+              <MaterialCommunityIcons name="minus" size={14} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => incrementPlayerStat(activePlayerId, 'min')}
+              style={styles.smallButton}
+            >
+              <MaterialCommunityIcons name="plus" size={14} color="#000" />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.headerStat}>
           <Text style={styles.headerStatLabel}>PTS</Text>
-          <Text style={styles.headerStatValue}>{calculatePTS(activePlayer.stats)}</Text>
+          <Text style={styles.headerStatValue}>{calculateTotalPTS(activePlayer.stats)}</Text>
+        </View>
+        <View style={styles.headerStat}>
+          <Text style={styles.headerStatLabel}>FGM/FGA</Text>
+          <Text style={styles.headerStatValue}>{(activePlayer.stats.fgm||0)}/{(activePlayer.stats.fga||0)}</Text>
         </View>
         <View style={styles.headerStat}>
           <Text style={styles.headerStatLabel}>REB</Text>
@@ -373,42 +470,85 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           <MaterialCommunityIcons name="check" size={20} color="#000" />
           <Text style={styles.saveButtonText}>Save</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.saveButton, { marginLeft: 8, backgroundColor: '#444' }]}
+          onPress={() => console.log('PLAYERS', players)}
+        >
+          <MaterialCommunityIcons name="information" size={18} color="#fff" />
+          <Text style={[styles.saveButtonText, { color: '#fff' }]}>Log</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+        <View style={styles.tableContainer} testID="players-table" data-testid="players-table" accessibilityLabel="players-table">
+          <View style={[styles.tableRow, styles.tableHeader]}>
+            <Text style={styles.tableHeaderText}>Player</Text>
+            <Text style={styles.tableHeaderText}>FGM</Text>
+            <Text style={styles.tableHeaderText}>FGA</Text>
+            <Text style={styles.tableHeaderText}>PTS</Text>
+          </View>
+          {players.map((p) => (
+            <View
+              key={p.id}
+              style={[styles.tableRow, activePlayerId === p.id && styles.tableRowActive]}
+            >
+              <Text style={styles.tableCellText}>{p.name}</Text>
+              <Text style={styles.tableCellText}>{p.stats.fgm || 0}</Text>
+              <Text style={styles.tableCellText}>{p.stats.fga || 0}</Text>
+              <Text style={styles.tableCellText}>{calculateTotalPTS(p.stats)}</Text>
+            </View>
+          ))}
+        </View>
+        {/* Recent in-app logs (dev only) */}
+        <View style={{ marginTop: 8 }}>
+          <Text style={{ color: '#888', fontSize: 12, marginBottom: 6 }}>Recent Logs</Text>
+          <View style={styles.logContainer}>
+            {appLogs.slice(-6).reverse().map((entry, i) => (
+              <Text key={i} style={styles.logText} numberOfLines={1} ellipsizeMode="tail">
+                {entry.time.replace('T', ' ').replace('Z','')} — {entry.text}
+              </Text>
+            ))}
+          </View>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Quick Shots Section */}
+        {/* 2-Point Shots Section */}
         <View style={styles.quickSection}>
-          <Text style={styles.quickSectionTitle}>FIELD GOALS</Text>
-          <ShotButton madeColor="#51cf66" missedColor="#ff6b6b" />
+          <Text style={styles.quickSectionTitle}>2-POINT SHOTS</Text>
+          <ShotButton type="two" />
           <View style={styles.shotStatsRow}>
             <View style={styles.shotStat}>
-              <Text style={styles.shotStatLabel}>FGA</Text>
-              <Text style={styles.shotStatValue}>{activePlayer.stats.fga}</Text>
+              <Text style={styles.shotStatLabel}>2PA</Text>
+                <Text style={styles.shotStatValue}>{
+                    (activePlayer.stats.twopa != null ? activePlayer.stats.twopa : ((activePlayer.stats.fga || 0) - (activePlayer.stats.threeepa || 0)))
+                  }</Text>
             </View>
             <View style={styles.shotStat}>
-              <Text style={styles.shotStatLabel}>FGM</Text>
-              <Text style={styles.shotStatValue}>{activePlayer.stats.fgm}</Text>
+              <Text style={styles.shotStatLabel}>2PM</Text>
+                <Text style={styles.shotStatValue}>{
+                    (activePlayer.stats.twopm != null ? activePlayer.stats.twopm : ((activePlayer.stats.fgm || 0) - (activePlayer.stats.threepm || 0)))
+                  }</Text>
             </View>
             <View style={styles.shotStat}>
-              <Text style={styles.shotStatLabel}>MISS</Text>
-              <Text style={styles.shotStatValue}>{activePlayer.stats.fgMissed}</Text>
-            </View>
-            <View style={styles.shotStat}>
-              <Text style={styles.shotStatLabel}>FG%</Text>
+              <Text style={styles.shotStatLabel}>2P%</Text>
               <Text style={styles.shotStatValue}>
-                {activePlayer.stats.fga > 0
-                  ? ((activePlayer.stats.fgm / activePlayer.stats.fga) * 100).toFixed(1)
-                  : 0}
-                %
+                  {((activePlayer.stats.fga || 0) - (activePlayer.stats.threeepa || 0)) > 0
+                    ? (((activePlayer.stats.fgm || 0) - (activePlayer.stats.threepm || 0)) /
+                        ((activePlayer.stats.fga || 0) - (activePlayer.stats.threeepa || 0)) *
+                        100
+                      ).toFixed(1)
+                    : 0}
+                  %
               </Text>
             </View>
           </View>
         </View>
 
-        {/* 3PT Section */}
+        {/* 3-Point Shots Section */}
         <View style={styles.quickSection}>
-          <Text style={styles.quickSectionTitle}>3-POINTERS</Text>
-          <ShotButton madeColor="#4c6ef5" missedColor="#ff6b6b" />
+          <Text style={styles.quickSectionTitle}>3-POINT SHOTS</Text>
+          <ShotButton type="three" />
           <View style={styles.shotStatsRow}>
             <View style={styles.shotStat}>
               <Text style={styles.shotStatLabel}>3PA</Text>
@@ -435,7 +575,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
         {/* Rebounds Section */}
         <View style={styles.quickSection}>
           <Text style={styles.quickSectionTitle}>REBOUNDS</Text>
-          <ReboundButton label="Rebounds" offColor="#ffa500" defColor="#4c6ef5" />
+          <ReboundButton offColor="#ffa500" defColor="#4c6ef5" />
           <View style={styles.reboundStatsRow}>
             <View style={styles.reboundStat}>
               <Text style={styles.reboundStatLabel}>ORB</Text>
@@ -457,7 +597,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
         {/* Free Throws Section */}
         <View style={styles.quickSection}>
           <Text style={styles.quickSectionTitle}>FREE THROWS</Text>
-          <ShotButton madeColor="#51cf66" missedColor="#ff6b6b" />
+          <ShotButton type="ft" />
           <View style={styles.shotStatsRow}>
             <View style={styles.shotStat}>
               <Text style={styles.shotStatLabel}>FTA</Text>
@@ -518,6 +658,10 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           <MaterialCommunityIcons name="restart" size={20} color="#ff6b6b" />
           <Text style={styles.resetButtonText}>Reset Game</Text>
         </TouchableOpacity>
+
+        <View style={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+          <Text style={{ color: '#666', fontSize: 10 }}>PLAYERS JSON: {JSON.stringify(players)}</Text>
+        </View>
       </ScrollView>
 
       {/* Add Player Modal */}
@@ -569,16 +713,6 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 onChangeText={setLocation}
               />
 
-              <Text style={styles.modalLabel}>Minutes Played</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Enter minutes"
-                placeholderTextColor="#666"
-                keyboardType="number-pad"
-                value={String(minutes)}
-                onChangeText={(val) => setMinutes(parseInt(val, 10) || 0)}
-              />
-
               <Text style={styles.modalLabel}>Players to Save</Text>
               <FlatList
                 data={players}
@@ -589,8 +723,8 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                     <View>
                       <Text style={styles.playerSaveItemName}>{item.name}</Text>
                       <Text style={styles.playerSaveItemStats}>
-                        {calculatePTS(item.stats)} pts | {item.stats.orb + item.stats.drb}{' '}
-                        reb | {item.stats.ast} ast
+                        {calculateTotalPTS(item.stats)} pts | {item.stats.orb + item.stats.drb}{' '}
+                        reb | {item.stats.ast} ast | {item.stats.min} min
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -689,9 +823,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  playerCardActive_points: {
-    color: '#000',
-  },
   addPlayerCard: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -717,6 +848,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderBottomColor: '#333',
     borderBottomWidth: 1,
+    alignItems: 'center',
   },
   headerStat: {
     alignItems: 'center',
@@ -731,6 +863,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  headerStatButtons: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 4,
+  },
+  smallButton: {
+    backgroundColor: '#333',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   saveButton: {
     backgroundColor: '#FFB81C',
@@ -903,6 +1046,56 @@ const styles = StyleSheet.create({
   resetButtonText: {
     color: '#ff6b6b',
     fontWeight: '600',
+  },
+  tableContainer: {
+    backgroundColor: '#111',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+  },
+  tableHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+    marginBottom: 6,
+  },
+  tableHeaderText: {
+    color: '#aaa',
+    flex: 1,
+    textAlign: 'left',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tableCellText: {
+    color: '#fff',
+    flex: 1,
+    textAlign: 'left',
+    fontSize: 13,
+  },
+  tableRowActive: {
+    backgroundColor: '#0f0f0f',
+    borderRadius: 6,
+  },
+  logContainer: {
+    backgroundColor: '#0f0f0f',
+    borderRadius: 6,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+    maxHeight: 120,
+  },
+  logText: {
+    color: '#ccc',
+    fontSize: 12,
+    marginBottom: 4,
   },
   modalContainer: {
     flex: 1,
