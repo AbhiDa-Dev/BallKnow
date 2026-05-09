@@ -493,17 +493,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
             </View>
           ))}
         </View>
-        {/* Recent in-app logs (dev only) */}
-        <View style={{ marginTop: 8 }}>
-          <Text style={{ color: '#888', fontSize: 12, marginBottom: 6 }}>Recent Logs</Text>
-          <View style={styles.logContainer}>
-            {appLogs.slice(-6).reverse().map((entry, i) => (
-              <Text key={i} style={styles.logText} numberOfLines={1} ellipsizeMode="tail">
-                {entry.time.replace('T', ' ').replace('Z','')} — {entry.text}
-              </Text>
-            ))}
-          </View>
-        </View>
+        
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
