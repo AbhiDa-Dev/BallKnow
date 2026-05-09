@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { getAllGames, deleteGame } from '../services/storageService';
+import { getAllGames, deleteGame, updateGame } from '../services/storageService';
+import { calculatePlayerMetrics } from '../utils/analyticsEngine';
 
 const SORT_MODES = {
   VORP: 'vorp',
@@ -44,7 +45,29 @@ const LeaderboardScreen = () => {
     setLoading(true);
     try {
       const allGames = await getAllGames();
-      setGames(allGames);
+
+      // Recalculate metrics for games missing metrics or with zero VORP/BPM
+      const repaired = [];
+      for (const g of allGames) {
+        const needsMetrics = !g.metrics || (g.metrics.vorp === 0 && g.metrics.bpm === 0);
+        if (needsMetrics && g.stats) {
+          try {
+            const newMetrics = calculatePlayerMetrics(g.stats, g.teamStats || {});
+            g.metrics = newMetrics;
+            // persist the repaired metrics
+            try {
+              await updateGame(g.id, { metrics: newMetrics });
+            } catch (e) {
+              console.warn('Failed to persist repaired metrics for', g.id, e.message);
+            }
+          } catch (e) {
+            console.warn('Failed to recalc metrics for', g.id, e.message);
+          }
+        }
+        repaired.push(g);
+      }
+
+      setGames(repaired);
     } catch (error) {
       console.error('Error loading games:', error);
     } finally {
