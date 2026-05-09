@@ -26,7 +26,6 @@ export const saveGame = async (game) => {
     };
     games.push(newGame);
     await AsyncStorage.setItem(STORAGE_KEYS.GAMES, JSON.stringify(games));
-    console.log('Saved game:', newGame.id, newGame);
     return newGame;
   } catch (error) {
     console.error('Error saving game:', error);
