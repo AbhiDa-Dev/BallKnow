@@ -18,7 +18,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { saveGame } from '../services/storageService';
-import { pushLog, getLogs } from '../services/uiLogService';
 
 const LiveGameTrackerScreen = ({ navigation }) => {
   const [players, setPlayers] = useState([]);
@@ -27,7 +26,6 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [location, setLocation] = useState('');
-  const [appLogs, setAppLogs] = useState(getLogs());
 
   // Default stat structure for a player
   const createEmptyStats = () => ({
@@ -213,8 +211,6 @@ const LiveGameTrackerScreen = ({ navigation }) => {
         teamStats: { possessions: 100 },
       });
       console.log('LiveTracker saved game:', savedGame.id, savedGame);
-      pushLog(`LiveTracker saved: ${savedGame.id} ${playerToSave.name}`);
-      setAppLogs(getLogs());
 
       Alert.alert('Success', `${playerToSave.name}'s game saved!`);
     } catch (error) {
@@ -238,14 +234,12 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           pts: calculateTotalPTS(player.stats),
         };
 
-        const savedGame = await saveGame({
+        await saveGame({
           playerName: player.name,
           location: location.trim(),
           stats: gameStats,
           teamStats: { possessions: 100 },
         });
-        pushLog(`LiveTracker saved: ${savedGame.id} ${player.name}`);
-        setAppLogs(getLogs());
         saved++;
       } catch (error) {
         failed++;
@@ -1084,19 +1078,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f0f0f',
     borderRadius: 6,
   },
-  logContainer: {
-    backgroundColor: '#0f0f0f',
-    borderRadius: 6,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#222',
-    maxHeight: 120,
-  },
-  logText: {
-    color: '#ccc',
-    fontSize: 12,
-    marginBottom: 4,
-  },
+  
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',

@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { saveGame, getAllGames } from '../services/storageService';
-import { pushLog } from '../services/uiLogService';
 
 const STAT_FIELDS = [
   { key: 'min', label: 'Minutes Played', category: 'basic' },
@@ -157,7 +156,6 @@ const GameEditorScreen = ({ navigation }) => {
             teamStats: { possessions: 100 },
           });
           console.log('GameEditor saved game:', savedGame.id, savedGame);
-          try { pushLog(`GameEditor saved: ${savedGame.id} ${playerName}`); } catch (e) {}
           saved++;
         } catch (error) {
           failed++;
