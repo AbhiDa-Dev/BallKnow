@@ -59,8 +59,7 @@ export const calculatePER = (stats) => {
     pf,
     min,
   } = stats;
-
-  if (min === 0) return 0;
+  const minutes = min && min > 0 ? min : 1;
 
   const perMin =
     (pts +
@@ -71,7 +70,7 @@ export const calculatePER = (stats) => {
       (fga - pts / 2) * 0.2 -
       tov * 0.5 -
       pf * 0.1) /
-    min;
+    minutes;
 
   return Math.round(perMin * 10) / 10;
 };
@@ -98,16 +97,16 @@ export const calculateBPM = (stats, teamStats) => {
     min,
   } = stats;
 
-  if (min === 0) return 0;
+  const minutes = min && min > 0 ? min : 1;
 
   // Calculate per-36 min rates
   const possessions = teamStats.possessions || 100;
-  const per36Pts = (pts / min) * 36;
-  const per36AST = (ast / min) * 36;
-  const per36STL = (stl / min) * 36;
-  const per36BLK = (blk / min) * 36;
-  const per36TOV = (tov / min) * 36;
-  const per36REB = ((orb + drb) / min) * 36;
+  const per36Pts = (pts / minutes) * 36;
+  const per36AST = (ast / minutes) * 36;
+  const per36STL = (stl / minutes) * 36;
+  const per36BLK = (blk / minutes) * 36;
+  const per36TOV = (tov / minutes) * 36;
+  const per36REB = ((orb + drb) / minutes) * 36;
 
   // Offensive impact
   const efg = calculateEFG(fgm, threepm, fga);
@@ -120,7 +119,7 @@ export const calculateBPM = (stats, teamStats) => {
   }
 
   // Defensive impact (STL + BLK - PF impact)
-  let defensiveRating = (per36STL + per36BLK) * 2 - (pf / min) * 36;
+  let defensiveRating = (per36STL + per36BLK) * 2 - (pf / minutes) * 36;
 
   // Rebound impact
   let reboundImpact = (per36REB - LEAGUE_AVERAGE.drbRate * 36) * 0.5;
@@ -140,8 +139,7 @@ export const calculateBPM = (stats, teamStats) => {
  */
 export const calculateVORP = (stats, teamStats) => {
   const { min } = stats;
-
-  if (min === 0) return 0;
+  const minutes = min && min > 0 ? min : 1;
 
   // Get BPM
   const bpm = calculateBPM(stats, teamStats);
@@ -150,7 +148,7 @@ export const calculateVORP = (stats, teamStats) => {
   const vorpMultiplier = 1.2;
 
   // Calculate per-48 minute value
-  const vorp = (bpm * min) / 48 * vorpMultiplier;
+  const vorp = (bpm * minutes) / 48 * vorpMultiplier;
 
   return Math.round(vorp * 10) / 10;
 };
@@ -209,6 +207,6 @@ export const validateGameStats = (stats) => {
  * Calculate team possession estimate
  */
 export const calculateTeamPossessions = (teamStats) => {
-  const { fga, ora, tov, fta } = teamStats;
-  return (fga - ora + tov + (0.44 * fta)) || 100;
+  const { fga, orb, tov, fta } = teamStats;
+  return (fga - orb + tov + (0.44 * fta)) || 100;
 };
