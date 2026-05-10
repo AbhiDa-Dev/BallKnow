@@ -3,13 +3,6 @@
  * Calculates VORP, BPM, and TS% for local game data
  */
 
-// NBA Replacement Level Baseline (per 36 minutes)
-const REPLACEMENT_LEVEL = {
-  efficiency: 0.55,
-  tsPct: 0.51,
-  asbRatio: 0.20, // Assist/Scoring Ratio
-};
-
 // League Average Constants (used for BPM calculation)
 const LEAGUE_AVERAGE = {
   ptsPerGame: 105,
@@ -27,6 +20,7 @@ const LEAGUE_AVERAGE = {
  * TS% = PTS / (2 * (FGA + 0.44 * FTA))
  */
 export const calculateTS = (pts, fga, fta) => {
+  if (!pts || pts === 0) return 0;
   if (fga === 0 || (fga + 0.44 * fta) === 0) return 0;
   const denom = 2 * (fga + 0.44 * fta);
   return (pts / denom) * 100;
@@ -37,7 +31,7 @@ export const calculateTS = (pts, fga, fta) => {
  * eFG% = (FGM + 0.5 * 3PM) / FGA
  */
 export const calculateEFG = (fgm, threepm, fga) => {
-  if (fga === 0) return 0;
+  if (!fgm || fga === 0) return 0;
   return ((fgm + 0.5 * threepm) / fga) * 100;
 };
 
@@ -47,18 +41,19 @@ export const calculateEFG = (fgm, threepm, fga) => {
  */
 export const calculatePER = (stats) => {
   const {
-    pts,
-    fga,
-    fta,
-    orb,
-    drb,
-    ast,
-    stl,
-    blk,
-    tov,
-    pf,
-    min,
-  } = stats;
+    pts = 0,
+    fga = 0,
+    fta = 0,
+    orb = 0,
+    drb = 0,
+    ast = 0,
+    stl = 0,
+    blk = 0,
+    tov = 0,
+    pf = 0,
+    min = 0,
+  } = stats || {};
+
   const minutes = min && min > 0 ? min : 1;
 
   const perMin =
@@ -72,39 +67,36 @@ export const calculatePER = (stats) => {
       pf * 0.1) /
     minutes;
 
-        const debugObj = {
-          stats,
-          teamStats,
-          minutes,
-          possessions,
-          per36Pts,
-          per36AST,
-          per36STL,
-          per36BLK,
-          per36TOV,
-          per36REB,
-          efg,
-          ts,
-          offensiveRating,
-          defensiveRating,
-          reboundImpact,
-          tovImpact,
-          bpmRaw: bpm,
-        };
-        console.debug('BPM Debug', debugObj);
-        try {
-          window.localStorage.setItem('ballknow_bpm_debug', JSON.stringify(debugObj));
-        } catch (e) {
-          // ignore storage errors
-        }
-      }
-    blk,
-    tov,
-    pf,
-    min,
-  } = stats;
+  return Math.round(perMin * 10) / 10;
+};
 
-  const minutes = min && min > 0 ? min : 1;
+/**
+ * Calculate Box Plus-Minus (BPM)
+ * On-court rating for player impact in points per 100 possessions
+ */
+export const calculateBPM = (stats, teamStats = {}) => {
+  const {
+    pts = 0,
+    fga = 0,
+    fgm = 0,
+    threepm = 0,
+    fta = 0,
+    ftm = 0,
+    orb = 0,
+    drb = 0,
+    ast = 0,
+    stl = 0,
+    blk = 0,
+    tov = 0,
+    pf = 0,
+    min = 0,
+  } = stats || {};
+
+  // Use provided minutes if >0, otherwise try an estimatedMinutes fallback from teamStats
+  const minutes = min && min > 0 ? min : (teamStats.estimatedMinutes || 0);
+
+  // If no reliable minutes, metrics are unreliable — return 0 to avoid misleading values
+  if (minutes === 0) return 0;
 
   // Calculate per-36 min rates
   const possessions = teamStats.possessions || 100;
@@ -135,12 +127,19 @@ export const calculatePER = (stats) => {
   let tovImpact = -per36TOV * 0.5;
 
   // Combined BPM = Offensive + Defensive + Rebounding + Turnover
-  const bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
+  let bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
 
-  // Debug: log intermediate values when running in dev
+  // Cap extreme BPM values to avoid misleading outputs from tiny-minute samples
+  const BPM_CAP = 50; // points per 100 possessions cap
+  if (Number.isFinite(bpm)) {
+    if (bpm > BPM_CAP) bpm = BPM_CAP;
+    if (bpm < -BPM_CAP) bpm = -BPM_CAP;
+  }
+
+  // Debug: optionally persist intermediate values when debug flag is set
   try {
     if (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('ballknow_debug')) {
-      console.debug('BPM Debug', {
+      const debugObj = {
         stats,
         teamStats,
         minutes,
@@ -158,7 +157,13 @@ export const calculatePER = (stats) => {
         reboundImpact,
         tovImpact,
         bpmRaw: bpm,
-      });
+      };
+      console.debug('BPM Debug', debugObj);
+      try {
+        window.localStorage.setItem('ballknow_bpm_debug', JSON.stringify(debugObj));
+      } catch (e) {
+        // ignore storage errors
+      }
     }
   } catch (e) {
     // ignore
@@ -171,18 +176,23 @@ export const calculatePER = (stats) => {
  * Calculate Value Over Replacement Player (VORP)
  * Measures how much better a player is than a replacement-level player
  */
-export const calculateVORP = (stats, teamStats) => {
-  const { min } = stats;
-  const minutes = min && min > 0 ? min : 1;
+export const calculateVORP = (stats, teamStats = {}) => {
+  const { min = 0 } = stats || {};
+  const minutes = min && min > 0 ? min : (teamStats.estimatedMinutes || 0);
 
-  // Get BPM
+  // If no reliable minutes, VORP is unreliable
+  if (minutes === 0) return 0;
+
   const bpm = calculateBPM(stats, teamStats);
 
-  // VORP adjustment factor
   const vorpMultiplier = 1.2;
+  let vorp = (bpm * minutes) / 48 * vorpMultiplier;
 
-  // Calculate per-48 minute value
-  const vorp = (bpm * minutes) / 48 * vorpMultiplier;
+  const VORP_CAP = 10;
+  if (Number.isFinite(vorp)) {
+    if (vorp > VORP_CAP) vorp = VORP_CAP;
+    if (vorp < -VORP_CAP) vorp = -VORP_CAP;
+  }
 
   return Math.round(vorp * 10) / 10;
 };
@@ -190,12 +200,16 @@ export const calculateVORP = (stats, teamStats) => {
 /**
  * Calculate all metrics for a player game session
  */
-export const calculatePlayerMetrics = (stats, teamStats) => {
-  const ts = calculateTS(stats.pts, stats.fga, stats.fta);
-  const efg = calculateEFG(stats.fgm, stats.threepm, stats.fga);
-  const per = calculatePER(stats);
-  const bpm = calculateBPM(stats, teamStats);
-  const vorp = calculateVORP(stats, teamStats);
+export const calculatePlayerMetrics = (stats, teamStats = {}) => {
+  const ts = calculateTS(stats.pts || 0, stats.fga || 0, stats.fta || 0);
+  const efg = calculateEFG(stats.fgm || 0, stats.threepm || 0, stats.fga || 0);
+  const per = calculatePER(stats || {});
+
+  const minutes = stats && stats.min && stats.min > 0 ? stats.min : (teamStats.estimatedMinutes || 0);
+  const metricsReliable = minutes > 0;
+
+  const bpm = metricsReliable ? calculateBPM(stats, teamStats) : 0;
+  const vorp = metricsReliable ? calculateVORP(stats, teamStats) : 0;
 
   return {
     ts: Math.round(ts * 10) / 10,
@@ -203,6 +217,7 @@ export const calculatePlayerMetrics = (stats, teamStats) => {
     per: Math.round(per * 10) / 10,
     bpm: Math.round(bpm * 10) / 10,
     vorp: Math.round(vorp * 10) / 10,
+    metricsReliable,
   };
 };
 
@@ -241,6 +256,6 @@ export const validateGameStats = (stats) => {
  * Calculate team possession estimate
  */
 export const calculateTeamPossessions = (teamStats) => {
-  const { fga, orb, tov, fta } = teamStats;
-  return (fga - orb + tov + (0.44 * fta)) || 100;
+  const { fga = 0, orb = 0, tov = 0, fta = 0 } = teamStats || {};
+  return (fga - orb + tov + 0.44 * fta) || 100;
 };
