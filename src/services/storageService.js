@@ -18,11 +18,21 @@ const STORAGE_KEYS = {
 export const saveGame = async (game) => {
   try {
     const games = await getAllGames();
+    // Ensure teamStats has an estimatedMinutes fallback for analytics
+    const teamStats = { ...(game.teamStats || {}) };
+    if ((!teamStats.estimatedMinutes || teamStats.estimatedMinutes === 0) && game.stats) {
+      // Heuristic: use provided game duration or default 40, divided by players count (default 5)
+      const duration = teamStats.gameDurationMinutes || 40;
+      const players = teamStats.playersCount || (Array.isArray(teamStats.players) ? teamStats.players.length : 5);
+      teamStats.estimatedMinutes = Math.max(1, Math.round(duration / players));
+    }
+
     const newGame = {
       id: Date.now().toString(),
       ...game,
+      teamStats,
       createdAt: new Date().toISOString(),
-      metrics: calculatePlayerMetrics(game.stats, game.teamStats),
+      metrics: calculatePlayerMetrics(game.stats, teamStats),
     };
     games.push(newGame);
     await AsyncStorage.setItem(STORAGE_KEYS.GAMES, JSON.stringify(games));
@@ -70,10 +80,22 @@ export const updateGame = async (gameId, updates) => {
     const gameIndex = games.findIndex((g) => g.id === gameId);
     if (gameIndex === -1) throw new Error('Game not found');
 
+    // Prepare teamStats with estimatedMinutes fallback
+    const baseGame = games[gameIndex];
+    const mergedTeamStats = { ...(baseGame.teamStats || {}), ...(updates.teamStats || {}) };
+    if ((!mergedTeamStats.estimatedMinutes || mergedTeamStats.estimatedMinutes === 0)) {
+      const duration = mergedTeamStats.gameDurationMinutes || 40;
+      const players = mergedTeamStats.playersCount || (Array.isArray(mergedTeamStats.players) ? mergedTeamStats.players.length : 5);
+      mergedTeamStats.estimatedMinutes = Math.max(1, Math.round(duration / players));
+    }
+
+    const mergedStats = { ...(baseGame.stats || {}), ...(updates.stats || {}) };
+
     const updatedGame = {
-      ...games[gameIndex],
+      ...baseGame,
       ...updates,
-      metrics: calculatePlayerMetrics(updates.stats || games[gameIndex].stats, updates.teamStats || games[gameIndex].teamStats),
+      teamStats: mergedTeamStats,
+      metrics: calculatePlayerMetrics(mergedStats, mergedTeamStats),
     };
     games[gameIndex] = updatedGame;
     await AsyncStorage.setItem(STORAGE_KEYS.GAMES, JSON.stringify(games));

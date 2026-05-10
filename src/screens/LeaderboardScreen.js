@@ -125,10 +125,10 @@ const LeaderboardScreen = () => {
           </Text>
         </View>
         <View style={styles.metricsContainer}>
-          <MetricBox label="VORP" value={game.metrics?.vorp || 0} highlight={sortBy === SORT_MODES.VORP} />
-          <MetricBox label="BPM" value={game.metrics?.bpm || 0} highlight={sortBy === SORT_MODES.BPM} />
-          <MetricBox label="TS%" value={game.metrics?.ts || 0} highlight={sortBy === SORT_MODES.TS} />
-          <MetricBox label="PTS" value={game.stats?.pts || 0} highlight={sortBy === SORT_MODES.POINTS} />
+          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.VORP} />
+          <MetricBox label="BPM" value={game.metrics?.bpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} />
+          <MetricBox label="TS%" value={game.metrics?.ts} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.TS} />
+          <MetricBox label="PTS" value={game.stats?.pts} reliable={true} highlight={sortBy === SORT_MODES.POINTS} />
         </View>
       </View>
       <TouchableOpacity
@@ -140,12 +140,15 @@ const LeaderboardScreen = () => {
     </Animated.View>
   );
 
-  const MetricBox = ({ label, value, highlight }) => (
-    <View style={[styles.metricBox, highlight && styles.metricBoxHighlight]}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value.toFixed(1)}</Text>
-    </View>
-  );
+  const MetricBox = ({ label, value, reliable = true, highlight }) => {
+    const display = !reliable || value === undefined || value === null ? 'N/A' : Number(value).toFixed(1);
+    return (
+      <View style={[styles.metricBox, highlight && styles.metricBoxHighlight]}>
+        <Text style={styles.metricLabel}>{label}</Text>
+        <Text style={styles.metricValue}>{display}</Text>
+      </View>
+    );
+  };
 
   const SortButton = ({ mode, label }) => (
     <TouchableOpacity
