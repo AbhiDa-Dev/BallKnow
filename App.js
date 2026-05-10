@@ -3,16 +3,17 @@
  * Entry point with bottom tab navigation
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 // GameEditorScreen removed — tab was unstable
 // import GameEditorScreen from './src/screens/GameEditorScreen';
 import LiveGameTrackerScreen from './src/screens/LiveGameTrackerScreen';
+import { clearAllData } from './src/services/storageService';
 
 const Tab = createBottomTabNavigator();
 
@@ -22,9 +23,40 @@ const styles = StyleSheet.create({
     borderTopColor: '#333',
     borderTopWidth: 1,
   },
+  bootContainer: {
+    flex: 1,
+    backgroundColor: '#0d0d0d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default function App() {
+  const [bootReady, setBootReady] = useState(false);
+
+  useEffect(() => {
+    const resetDevStorageOnBoot = async () => {
+      if (__DEV__) {
+        try {
+          await clearAllData();
+        } catch (error) {
+          console.warn('Failed to clear local data on boot:', error?.message || error);
+        }
+      }
+      setBootReady(true);
+    };
+
+    resetDevStorageOnBoot();
+  }, []);
+
+  if (!bootReady) {
+    return (
+      <View style={styles.bootContainer}>
+        <ActivityIndicator size="large" color="#FFB81C" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
       <Tab.Navigator
@@ -48,7 +80,7 @@ export default function App() {
           name="Leaderboard"
           component={LeaderboardScreen}
           options={{
-            title: 'Ball Knowledge',
+            title: 'BallKnowr',
             tabBarLabel: 'Leaderboard',
             tabBarIcon: ({ color, size }) => (
               <MaterialCommunityIcons name="podium" color={color} size={size} />

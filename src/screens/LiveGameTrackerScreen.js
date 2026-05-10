@@ -3,7 +3,7 @@
  * Real-time multi-player stat tracking with quick button presses during live games
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,7 +17,7 @@ import {
   FlatList,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { saveGame, updateGame } from '../services/storageService';
+import { clearAllData, saveGame, updateGame } from '../services/storageService';
 import { calculateTeamPossessions } from '../utils/analyticsEngine';
 
 const LiveGameTrackerScreen = ({ navigation }) => {
@@ -32,6 +32,8 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [teamModalVisible, setTeamModalVisible] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [pendingTeamForNewPlayer, setPendingTeamForNewPlayer] = useState(null);
+  const [showPlayersTable, setShowPlayersTable] = useState(false);
   // Always attempt to read bpm debug data; Save modal will display it unconditionally
   let bpmDebug = null;
   try {
@@ -74,7 +76,8 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     playersList.forEach((p) => {
       const s = p.stats || {};
       fga += s.fga || 0;
-      orb += (s.orb || 0) + (s.drb || 0);
+      // Possessions formula uses offensive rebounds only.
+      orb += s.orb || 0;
       tov += s.tov || 0;
       fta += s.fta || 0;
       const m = s.min || 0;
@@ -120,12 +123,13 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       id: Date.now().toString(),
       name: newPlayerName.trim(),
       stats: createEmptyStats(),
-      teamId: selectedTeamId,
+      teamId: pendingTeamForNewPlayer || selectedTeamId,
     };
 
-    setPlayers([...players, newPlayer]);
+    setPlayers((prev) => [...prev, newPlayer]);
     setActivePlayerId(newPlayer.id);
     setNewPlayerName('');
+    setPendingTeamForNewPlayer(null);
     setAddPlayerModalVisible(false);
   };
 
@@ -137,7 +141,6 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     const newTeam = { id: Date.now().toString(), name: teamNameInput.trim() };
     setTeams((prev) => [...prev, newTeam]);
     setTeamNameInput('');
-    setTeamModalVisible(false);
   };
 
   const removeTeam = (teamId) => {
@@ -146,43 +149,60 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     setPlayers((prev) => prev.map((p) => (p.teamId === teamId ? { ...p, teamId: null } : p)));
   };
 
-  const addPlayerToTeam = (teamId, playerName) => {
-    const newPlayer = {
-      id: Date.now().toString(),
-      name: (playerName && playerName.trim()) || `Player ${Date.now()}`,
-      stats: createEmptyStats(),
-      teamId,
-    };
-    setPlayers((prev) => [...prev, newPlayer]);
+  const openAddPlayerForTeam = (teamId) => {
+    setPendingTeamForNewPlayer(teamId);
+    setNewPlayerName('');
+    setAddPlayerModalVisible(true);
   };
 
   const fillTeamWithFiller = (teamId, count = 5) => {
     const filler = [];
     for (let i = 0; i < count; i++) {
+      const min = Math.floor(Math.random() * 25) + 12; // 12-36
+      const usageProfile = Math.random(); // lower => role player, higher => primary option
+
+      const twopaBase = usageProfile > 0.7 ? 10 : usageProfile > 0.35 ? 7 : 4;
+      const threepaBase = usageProfile > 0.7 ? 6 : usageProfile > 0.35 ? 4 : 2;
+      const ftaBase = usageProfile > 0.7 ? 5 : usageProfile > 0.35 ? 3 : 1;
+
+      const twopa = Math.max(0, twopaBase + Math.floor(Math.random() * 5) - 2);
+      const threeepa = Math.max(0, threepaBase + Math.floor(Math.random() * 5) - 2);
+      const fta = Math.max(0, ftaBase + Math.floor(Math.random() * 5) - 2);
+
+      const twopm = Math.floor(Math.random() * (twopa + 1)); // 0..twopa
+      const threepm = Math.floor(Math.random() * (threeepa + 1)); // 0..threeepa
+      const ftm = Math.floor(Math.random() * (fta + 1)); // 0..fta
+
+      const fga = twopa + threeepa;
+      const fgm = twopm + threepm;
+
       const id = Date.now().toString() + i;
       filler.push({
         id,
         name: `Filler ${i + 1}`,
         teamId,
         stats: {
-          min: 20,
-          fgm: Math.floor(Math.random() * 8),
-          fga: Math.floor(Math.random() * 18) + 1,
-          threepm: Math.floor(Math.random() * 4),
-          threeepa: Math.floor(Math.random() * 8),
-          ftm: Math.floor(Math.random() * 5),
-          fta: Math.floor(Math.random() * 6),
-          orb: Math.floor(Math.random() * 3),
-          drb: Math.floor(Math.random() * 6),
-          ast: Math.floor(Math.random() * 6),
-          stl: Math.floor(Math.random() * 3),
-          blk: Math.floor(Math.random() * 2),
-          tov: Math.floor(Math.random() * 4),
-          pf: Math.floor(Math.random() * 4),
+          min,
+          fgm,
+          fga,
+          twopm,
+          twopa,
+          threepm,
+          threeepa,
+          ftm,
+          fta,
+          orb: Math.min(5, Math.floor(Math.random() * (Math.max(1, min / 8)))),
+          drb: Math.min(10, Math.floor(Math.random() * (Math.max(2, min / 5)))),
+          ast: Math.min(10, Math.floor(Math.random() * (Math.max(1, min / 5)))),
+          stl: Math.min(4, Math.floor(Math.random() * (Math.max(1, min / 10)))),
+          blk: Math.min(4, Math.floor(Math.random() * (Math.max(1, min / 10)))),
+          tov: Math.min(7, Math.floor(Math.random() * (Math.max(1, min / 6)))),
+          pf: Math.min(6, Math.floor(Math.random() * (Math.max(1, min / 7)))),
         },
       });
     }
     setPlayers((prev) => [...prev, ...filler]);
+    setActivePlayerId((prevActiveId) => prevActiveId || filler[0]?.id || null);
   };
 
   // Edit existing player: rename, assign/unassign, delete
@@ -215,8 +235,20 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   };
 
   const getActivePlayer = () => {
-    return players.find((p) => p.id === activePlayerId);
+    if (players.length === 0) return null;
+    return players.find((p) => p.id === activePlayerId) || players[0];
   };
+
+  useEffect(() => {
+    if (players.length === 0) {
+      if (activePlayerId !== null) setActivePlayerId(null);
+      return;
+    }
+    const hasActive = players.some((p) => p.id === activePlayerId);
+    if (!hasActive) {
+      setActivePlayerId(players[0].id);
+    }
+  }, [players, activePlayerId]);
 
   const updatePlayerStat = (playerId, statKey, value) => {
     setPlayers((prev) =>
@@ -315,15 +347,49 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     });
   };
 
+  const clearCurrentGameState = () => {
+    setPlayers([]);
+    setTeams([]);
+    setActivePlayerId(null);
+    setSelectedTeamId(null);
+    setPendingTeamForNewPlayer(null);
+    setNewPlayerName('');
+    setTeamNameInput('');
+    setLocation('');
+    setAddPlayerModalVisible(false);
+    setEditPlayerModalVisible(false);
+    setTeamModalVisible(false);
+    setSaveModalVisible(false);
+    setShowPlayersTable(false);
+  };
+
+  const clearCurrentGameAndLeaderboard = async () => {
+    try {
+      await clearAllData();
+    } catch (error) {
+      console.warn('Failed to clear persisted data:', error?.message || error);
+    } finally {
+      clearCurrentGameState();
+    }
+  };
+
   const resetGame = () => {
-    Alert.alert('Reset Game?', 'This will clear all players and stats.', [
+
+    // React Native Alert can be inconsistent on web; provide a fallback.
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      const confirmed = window.confirm('Reset game? This will clear live tracker state and leaderboard data.');
+      if (confirmed) {
+        clearCurrentGameAndLeaderboard();
+      }
+      return;
+    }
+
+    Alert.alert('Reset Game?', 'This will clear live tracker state and leaderboard data.', [
       { text: 'Cancel', onPress: () => {} },
       {
         text: 'Reset',
         onPress: () => {
-          setPlayers([]);
-          setActivePlayerId(null);
-          setLocation('');
+          clearCurrentGameAndLeaderboard();
         },
         style: 'destructive',
       },
@@ -426,9 +492,11 @@ const LiveGameTrackerScreen = ({ navigation }) => {
 
     setSaving(false);
     setSaveModalVisible(false);
-    resetGame();
 
-    Alert.alert('Game Saved', `${saved} player(s) saved${failed > 0 ? `, ${failed} failed` : ''}`);
+    Alert.alert(
+      'Game Saved',
+      `${saved} player(s) saved${failed > 0 ? `, ${failed} failed` : ''}. Live tracker state was kept.`
+    );
   };
 
   // Flexible shot button that can track different stat keys
@@ -509,6 +577,13 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           <MaterialCommunityIcons name="basketball" size={48} color="#666" />
           <Text style={styles.emptyStateText}>No Players Registered</Text>
           <TouchableOpacity
+            style={[styles.addFirstPlayerButton, { backgroundColor: '#222' }]}
+            onPress={() => setTeamModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="account-group" size={20} color="#FFB81C" />
+            <Text style={[styles.addFirstPlayerButtonText, { color: '#fff' }]}>Create Team First</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.addFirstPlayerButton}
             onPress={() => setAddPlayerModalVisible(true)}
           >
@@ -517,17 +592,85 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        <Modal visible={teamModalVisible} transparent animationType="slide">
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Teams</Text>
+                <TouchableOpacity onPress={() => setTeamModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.modalBody}>
+                <Text style={styles.modalLabel}>Create Team</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Team name"
+                  placeholderTextColor="#666"
+                  value={teamNameInput}
+                  onChangeText={setTeamNameInput}
+                />
+                <TouchableOpacity style={styles.modalAddButton} onPress={addTeam}>
+                  <Text style={styles.modalAddButtonText}>Add Team</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.modalLabel, { marginTop: 20 }]}>Existing Teams</Text>
+                {teams.map((t) => (
+                  <View key={t.id} style={styles.playerSaveItem}>
+                    <View>
+                      <Text style={styles.playerSaveItemName}>{t.name}</Text>
+                      <Text style={styles.playerSaveItemStats}>{players.filter(p => p.teamId === t.id).length} players</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => openAddPlayerForTeam(t.id)}
+                      >
+                        <MaterialCommunityIcons name="plus" size={18} color="#FFB81C" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => fillTeamWithFiller(t.id, 5)}
+                      >
+                        <MaterialCommunityIcons name="dice-multiple" size={18} color="#FFB81C" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => removeTeam(t.id)}
+                      >
+                        <MaterialCommunityIcons name="trash-can" size={18} color="#ff6b6b" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { marginTop: 12 }]}
+                  onPress={() => setTeamModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelButtonText}>Done</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        </Modal>
+
         <Modal visible={addPlayerModalVisible} transparent animationType="slide">
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Register Player</Text>
-                <TouchableOpacity onPress={() => setAddPlayerModalVisible(false)}>
+                <TouchableOpacity onPress={() => { setPendingTeamForNewPlayer(null); setAddPlayerModalVisible(false); }}>
                   <MaterialCommunityIcons name="close" size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
               <View style={styles.modalBody}>
                 <Text style={styles.modalLabel}>Player Name</Text>
+                {pendingTeamForNewPlayer && (
+                  <Text style={styles.playerSaveItemStats}>
+                    Adding to: {teams.find((team) => team.id === pendingTeamForNewPlayer)?.name || 'Selected Team'}
+                  </Text>
+                )}
                 <TextInput
                   style={styles.modalInput}
                   placeholder="Enter player name"
@@ -538,6 +681,71 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 />
                 <TouchableOpacity style={styles.modalAddButton} onPress={addPlayer}>
                   <Text style={styles.modalAddButtonText}>Add Player</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+
+        <Modal visible={editPlayerModalVisible} transparent animationType="slide">
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Player</Text>
+                <TouchableOpacity onPress={() => setEditPlayerModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.modalLabel}>Name</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={editPlayerNameInput}
+                  onChangeText={setEditPlayerNameInput}
+                />
+
+                <Text style={styles.modalLabel}>Assign to Team</Text>
+                {teams.length === 0 && <Text style={{ color: '#888' }}>No teams created</Text>}
+                {teams.map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.saveSingleButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                    onPress={() => assignPlayerToTeam(editPlayerId, t.id)}
+                  >
+                    <MaterialCommunityIcons name="account" size={16} color="#FFB81C" />
+                    <Text style={{ color: '#fff' }}>{t.name}</Text>
+                  </TouchableOpacity>
+                ))}
+
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={[styles.modalAddButton, { flex: 1, backgroundColor: '#ff6b6b' }]}
+                    onPress={() => {
+                      removePlayer(editPlayerId);
+                      setEditPlayerModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalAddButtonText}>Delete Player</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalCancelButton, { flex: 1 }]}
+                    onPress={() => {
+                      if (editPlayerId) {
+                        editPlayerName(editPlayerId, editPlayerNameInput.trim() || 'Unnamed');
+                      }
+                      setEditPlayerModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalCancelButtonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { marginTop: 12 }]}
+                  onPress={() => {
+                    if (editPlayerId) unassignPlayer(editPlayerId);
+                  }}
+                >
+                  <Text style={styles.modalCancelButtonText}>Unassign from Team</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -617,14 +825,29 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 <Text style={[styles.modalLabel, { marginTop: 20 }]}>Existing Teams</Text>
                 {teams.map((t) => (
                   <View key={t.id} style={styles.playerSaveItem}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.playerSaveItemName}>{t.name}</Text>
                       <Text style={styles.playerSaveItemStats}>{players.filter(p => p.teamId === t.id).length} players</Text>
+                      {players
+                        .filter((p) => p.teamId === t.id)
+                        .map((p) => (
+                          <View
+                            key={p.id}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}
+                          >
+                            <TouchableOpacity onPress={() => openEditPlayerModal(p)}>
+                              <Text style={{ color: '#ddd' }}>{p.name}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => removePlayer(p.id)}>
+                              <MaterialCommunityIcons name="close-circle" size={18} color="#ff6b6b" />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                       <TouchableOpacity
                         style={styles.saveSingleButton}
-                        onPress={() => addPlayerToTeam(t.id)}
+                        onPress={() => openAddPlayerForTeam(t.id)}
                       >
                         <MaterialCommunityIcons name="plus" size={18} color="#FFB81C" />
                       </TouchableOpacity>
@@ -714,26 +937,40 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       </View>
 
       <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-        <View style={styles.tableContainer} testID="players-table" data-testid="players-table" accessibilityLabel="players-table">
-          <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={styles.tableHeaderText}>Player</Text>
-            <Text style={styles.tableHeaderText}>FGM</Text>
-            <Text style={styles.tableHeaderText}>FGA</Text>
-            <Text style={styles.tableHeaderText}>PTS</Text>
-          </View>
-          {players.map((p) => (
-            <View
-              key={p.id}
-              style={[styles.tableRow, activePlayerId === p.id && styles.tableRowActive]}
-            >
-              <Text style={styles.tableCellText}>{p.name}</Text>
-              <Text style={styles.tableCellText}>{p.stats.fgm || 0}</Text>
-              <Text style={styles.tableCellText}>{p.stats.fga || 0}</Text>
-              <Text style={styles.tableCellText}>{calculateTotalPTS(p.stats)}</Text>
+        <TouchableOpacity
+          style={styles.tableToggleButton}
+          onPress={() => setShowPlayersTable((prev) => !prev)}
+        >
+          <MaterialCommunityIcons
+            name={showPlayersTable ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color="#FFB81C"
+          />
+          <Text style={styles.tableToggleText}>
+            {showPlayersTable ? 'Hide Team Players' : 'Show Team Players'}
+          </Text>
+        </TouchableOpacity>
+        {showPlayersTable && (
+          <View style={styles.tableContainer} testID="players-table" data-testid="players-table" accessibilityLabel="players-table">
+            <View style={[styles.tableRow, styles.tableHeader]}>
+              <Text style={styles.tableHeaderText}>Player</Text>
+              <Text style={styles.tableHeaderText}>FGM</Text>
+              <Text style={styles.tableHeaderText}>FGA</Text>
+              <Text style={styles.tableHeaderText}>PTS</Text>
             </View>
-          ))}
-        </View>
-        
+            {players.map((p) => (
+              <View
+                key={p.id}
+                style={[styles.tableRow, activePlayerId === p.id && styles.tableRowActive]}
+              >
+                <Text style={styles.tableCellText}>{p.name}</Text>
+                <Text style={styles.tableCellText}>{p.stats.fgm || 0}</Text>
+                <Text style={styles.tableCellText}>{p.stats.fga || 0}</Text>
+                <Text style={styles.tableCellText}>{calculateTotalPTS(p.stats)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -894,12 +1131,17 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Register Player</Text>
-              <TouchableOpacity onPress={() => setAddPlayerModalVisible(false)}>
+              <TouchableOpacity onPress={() => { setPendingTeamForNewPlayer(null); setAddPlayerModalVisible(false); }}>
                 <MaterialCommunityIcons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
             <View style={styles.modalBody}>
               <Text style={styles.modalLabel}>Player Name</Text>
+              {pendingTeamForNewPlayer && (
+                <Text style={styles.playerSaveItemStats}>
+                  Adding to: {teams.find((team) => team.id === pendingTeamForNewPlayer)?.name || 'Selected Team'}
+                </Text>
+              )}
               <TextInput
                 style={styles.modalInput}
                 placeholder="Enter player name"
@@ -911,6 +1153,17 @@ const LiveGameTrackerScreen = ({ navigation }) => {
               <TouchableOpacity style={styles.modalAddButton} onPress={addPlayer}>
                 <Text style={styles.modalAddButtonText}>Add Player</Text>
               </TouchableOpacity>
+              {pendingTeamForNewPlayer && (
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setPendingTeamForNewPlayer(null);
+                    setAddPlayerModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel Team Add</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </SafeAreaView>
@@ -1362,6 +1615,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: '#222',
+  },
+  tableToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  tableToggleText: {
+    color: '#FFB81C',
+    fontWeight: '600',
+    fontSize: 12,
   },
   tableRow: {
     flexDirection: 'row',

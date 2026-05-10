@@ -15,7 +15,6 @@ import {
   RefreshControl,
   Animated,
   PanResponder,
-  ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -28,6 +27,12 @@ const SORT_MODES = {
   POINTS: 'points',
   TS: 'ts',
   PTS: 'pts',
+  FGM: 'fgm',
+  FGA: 'fga',
+  FGPCT: 'fgpct',
+  THREEPM: 'threepm',
+  THREEPA: 'threepa',
+  THREEPPCT: 'threeppct',
   REB: 'reb',
   AST: 'ast',
   MIN: 'min',
@@ -45,6 +50,7 @@ const LeaderboardScreen = () => {
   const [sortBy, setSortBy] = useState(SORT_MODES.VORP);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // Load games on screen focus
   useFocusEffect(
@@ -116,6 +122,26 @@ const LeaderboardScreen = () => {
         return sorted.sort((a, b) => (b.metrics?.ts || 0) - (a.metrics?.ts || 0));
       case SORT_MODES.PTS:
         return sorted.sort((a, b) => (b.stats?.pts || 0) - (a.stats?.pts || 0));
+      case SORT_MODES.FGM:
+        return sorted.sort((a, b) => (b.stats?.fgm || 0) - (a.stats?.fgm || 0));
+      case SORT_MODES.FGA:
+        return sorted.sort((a, b) => (b.stats?.fga || 0) - (a.stats?.fga || 0));
+      case SORT_MODES.FGPCT:
+        return sorted.sort((a, b) => {
+          const aPct = (a.stats?.fga || 0) > 0 ? ((a.stats?.fgm || 0) / (a.stats?.fga || 1)) * 100 : 0;
+          const bPct = (b.stats?.fga || 0) > 0 ? ((b.stats?.fgm || 0) / (b.stats?.fga || 1)) * 100 : 0;
+          return bPct - aPct;
+        });
+      case SORT_MODES.THREEPM:
+        return sorted.sort((a, b) => (b.stats?.threepm || 0) - (a.stats?.threepm || 0));
+      case SORT_MODES.THREEPA:
+        return sorted.sort((a, b) => (b.stats?.threeepa || 0) - (a.stats?.threeepa || 0));
+      case SORT_MODES.THREEPPCT:
+        return sorted.sort((a, b) => {
+          const aPct = (a.stats?.threeepa || 0) > 0 ? ((a.stats?.threepm || 0) / (a.stats?.threeepa || 1)) * 100 : 0;
+          const bPct = (b.stats?.threeepa || 0) > 0 ? ((b.stats?.threepm || 0) / (b.stats?.threeepa || 1)) * 100 : 0;
+          return bPct - aPct;
+        });
       case SORT_MODES.REB:
         return sorted.sort((a, b) => ((b.stats?.orb || 0) + (b.stats?.drb || 0)) - ((a.stats?.orb || 0) + (a.stats?.drb || 0)));
       case SORT_MODES.AST:
@@ -159,6 +185,22 @@ const LeaderboardScreen = () => {
         </View>
         <View style={styles.metricsContainerMultiple}>
           <MetricBox label="PTS" value={game.stats?.pts} reliable={true} highlight={sortBy === SORT_MODES.PTS} />
+          <MetricBox label="FGM" value={game.stats?.fgm} reliable={true} highlight={sortBy === SORT_MODES.FGM} />
+          <MetricBox label="FGA" value={game.stats?.fga} reliable={true} highlight={sortBy === SORT_MODES.FGA} />
+          <MetricBox
+            label="FG%"
+            value={(game.stats?.fga || 0) > 0 ? ((game.stats?.fgm || 0) / (game.stats?.fga || 1)) * 100 : 0}
+            reliable={true}
+            highlight={sortBy === SORT_MODES.FGPCT}
+          />
+          <MetricBox label="3PM" value={game.stats?.threepm} reliable={true} highlight={sortBy === SORT_MODES.THREEPM} />
+          <MetricBox label="3PA" value={game.stats?.threeepa} reliable={true} highlight={sortBy === SORT_MODES.THREEPA} />
+          <MetricBox
+            label="3P%"
+            value={(game.stats?.threeepa || 0) > 0 ? ((game.stats?.threepm || 0) / (game.stats?.threeepa || 1)) * 100 : 0}
+            reliable={true}
+            highlight={sortBy === SORT_MODES.THREEPPCT}
+          />
           <MetricBox label="REB" value={(game.stats?.orb || 0) + (game.stats?.drb || 0)} reliable={true} highlight={sortBy === SORT_MODES.REB} />
           <MetricBox label="AST" value={game.stats?.ast} reliable={true} highlight={sortBy === SORT_MODES.AST} />
           <MetricBox label="MIN" value={game.stats?.min} reliable={true} highlight={sortBy === SORT_MODES.MIN} />
@@ -185,17 +227,18 @@ const LeaderboardScreen = () => {
 
   const MetricBox = ({ label, value, raw, reliable = true, highlight, debug = false }) => {
     let display;
+    const precision = label === 'VORP' ? 2 : 1;
     if (!reliable || value === undefined || value === null) {
       display = 'N/A';
     } else if (typeof value === 'string') {
       display = value;
     } else {
-      display = Number(value).toFixed(1);
+      display = Number(value).toFixed(precision);
     }
 
     // If debug mode and raw provided, show raw in parentheses
     if (debug && raw !== undefined && raw !== null && reliable) {
-      const rawStr = Number(raw).toFixed(1);
+      const rawStr = Number(raw).toFixed(precision);
       display = `${display} (${rawStr})`;
     }
 
@@ -207,9 +250,9 @@ const LeaderboardScreen = () => {
     );
   };
 
-  const SortButton = ({ mode, label }) => (
+  const SortButton = ({ mode, label, style }) => (
     <TouchableOpacity
-      style={[styles.sortButton, sortBy === mode && styles.sortButtonActive]}
+      style={[styles.sortButton, style, sortBy === mode && styles.sortButtonActive]}
       onPress={() => setSortBy(mode)}
     >
       <Text
@@ -234,22 +277,54 @@ const LeaderboardScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.sortContainerWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortContainer}>
-          <SortButton mode={SORT_MODES.VORP} label="VORP" />
-          <SortButton mode={SORT_MODES.BPM} label="BPM" />
-          <SortButton mode={SORT_MODES.TS} label="TS%" />
-          <SortButton mode={SORT_MODES.PTS} label="PTS" />
-          <SortButton mode={SORT_MODES.REB} label="REB" />
-          <SortButton mode={SORT_MODES.AST} label="AST" />
-          <SortButton mode={SORT_MODES.MIN} label="MIN" />
-          <SortButton mode={SORT_MODES.BLK} label="BLK" />
-          <SortButton mode={SORT_MODES.FT} label="FT" />
-          <SortButton mode={SORT_MODES.FTPCT} label="FT%" />
-          <SortButton mode={SORT_MODES.PF} label="PF" />
-          <SortButton mode={SORT_MODES.OBPM} label="OBPM" />
-          <SortButton mode={SORT_MODES.DBPM} label="DBPM" />
-          <SortButton mode={SORT_MODES.GSC} label="GSC" />
-        </ScrollView>
+        <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters((prev) => !prev)}>
+          <Text style={styles.filterToggleText}>{showFilters ? 'Hide Filters' : 'Show Filters'}</Text>
+          <MaterialCommunityIcons
+            name={showFilters ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color="#FFB81C"
+          />
+        </TouchableOpacity>
+
+        {showFilters && (
+          <>
+            <View style={styles.sortSection}>
+              <Text style={styles.sortSectionTitle}>Shooting</Text>
+              <View style={styles.sortContainer}>
+                <SortButton mode={SORT_MODES.FGM} label="FGM" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.FGA} label="FGA" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.FGPCT} label="FG%" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.THREEPM} label="3PM" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.THREEPA} label="3PA" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.THREEPPCT} label="3P%" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.FT} label="FT" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.FTPCT} label="FT%" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.TS} label="TS%" style={styles.sortButtonThird} />
+              </View>
+            </View>
+            <View style={styles.sortSection}>
+              <Text style={styles.sortSectionTitle}>Points + Rebounds + Assists</Text>
+              <View style={styles.sortContainer}>
+                <SortButton mode={SORT_MODES.PTS} label="PTS" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.REB} label="REB" style={styles.sortButtonThird} />
+                <SortButton mode={SORT_MODES.AST} label="AST" style={styles.sortButtonThird} />
+              </View>
+            </View>
+            <View style={styles.sortSection}>
+              <Text style={styles.sortSectionTitle}>Impact + Box</Text>
+              <View style={styles.sortContainer}>
+                <SortButton mode={SORT_MODES.VORP} label="VORP" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.BPM} label="BPM" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.OBPM} label="OBPM" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.DBPM} label="DBPM" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.GSC} label="GSC" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.MIN} label="MIN" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.BLK} label="BLK" style={styles.sortButtonQuarter} />
+                <SortButton mode={SORT_MODES.PF} label="PF" style={styles.sortButtonQuarter} />
+              </View>
+            </View>
+          </>
+        )}
       </View>
 
       {games.length === 0 ? (
@@ -285,14 +360,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   sortButton: {
-    flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 4,
-    marginHorizontal: 4,
+    paddingHorizontal: 2,
+    marginVertical: 4,
     borderRadius: 8,
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: '#444',
+  },
+  sortButtonThird: {
+    width: '32%',
+  },
+  sortButtonQuarter: {
+    width: '23.5%',
   },
   sortButtonActive: {
     backgroundColor: '#FFB81C',
@@ -384,12 +464,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderBottomColor: '#333',
     borderBottomWidth: 1,
+    paddingBottom: 4,
+  },
+  filterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomColor: '#2a2a2a',
+    borderBottomWidth: 1,
+  },
+  filterToggleText: {
+    color: '#FFB81C',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sortSection: {
+    paddingHorizontal: 8,
+    paddingTop: 6,
+  },
+  sortSectionTitle: {
+    color: '#888',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 6,
+    marginLeft: 4,
   },
   sortContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     paddingHorizontal: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
+    paddingVertical: 8,
   },
   metricBoxHighlight: {
     backgroundColor: '#FFB81C',
