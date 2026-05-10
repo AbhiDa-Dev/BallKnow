@@ -142,6 +142,7 @@ const LeaderboardScreen = () => {
   };
 
   const sortedGames = getSortedGames();
+  const debugMode = (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('ballknow_debug')) ? true : false;
 
   const GameCard = ({ game, index }) => (
     <Animated.View style={styles.gameCard}>
@@ -167,8 +168,8 @@ const LeaderboardScreen = () => {
           <MetricBox label="PF" value={game.stats?.pf} reliable={true} highlight={sortBy === SORT_MODES.PF} />
           <MetricBox label="OBPM" value={game.metrics?.obpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.OBPM} />
           <MetricBox label="DBPM" value={game.metrics?.dbpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.DBPM} />
-          <MetricBox label="BPM" value={game.metrics?.bpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} />
-          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.VORP} />
+          <MetricBox label="BPM" value={game.metrics?.bpm} raw={game.metrics?.bpmRaw} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} debug={debugMode} />
+          <MetricBox label="VORP" value={game.metrics?.vorp} raw={game.metrics?.vorpRaw} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.VORP} debug={debugMode} />
           <MetricBox label="TS%" value={game.metrics?.ts} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.TS} />
           <MetricBox label="GSC" value={game.metrics?.gameScore} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.GSC} />
         </View>
@@ -182,7 +183,7 @@ const LeaderboardScreen = () => {
     </Animated.View>
   );
 
-  const MetricBox = ({ label, value, reliable = true, highlight }) => {
+  const MetricBox = ({ label, value, raw, reliable = true, highlight, debug = false }) => {
     let display;
     if (!reliable || value === undefined || value === null) {
       display = 'N/A';
@@ -190,6 +191,12 @@ const LeaderboardScreen = () => {
       display = value;
     } else {
       display = Number(value).toFixed(1);
+    }
+
+    // If debug mode and raw provided, show raw in parentheses
+    if (debug && raw !== undefined && raw !== null && reliable) {
+      const rawStr = Number(raw).toFixed(1);
+      display = `${display} (${rawStr})`;
     }
 
     return (

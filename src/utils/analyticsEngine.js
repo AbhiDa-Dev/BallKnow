@@ -128,6 +128,7 @@ export const calculateBPM = (stats, teamStats = {}) => {
 
   // Combined BPM = Offensive + Defensive + Rebounding + Turnover
   let bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
+  const bpmRaw = bpm;
 
   // Cap extreme BPM values to avoid misleading outputs from tiny-minute samples
   const BPM_CAP = 50; // points per 100 possessions cap
@@ -224,6 +225,8 @@ export const calculateBPMComponents = (stats, teamStats = {}) => {
 
   let bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
 
+  const bpmRaw = bpm;
+
   const BPM_CAP = 50;
   if (Number.isFinite(bpm)) {
     if (bpm > BPM_CAP) bpm = BPM_CAP;
@@ -233,6 +236,7 @@ export const calculateBPMComponents = (stats, teamStats = {}) => {
   return {
     metricsReliable: true,
     bpm: Math.round(bpm * 10) / 10,
+    bpmRaw: Math.round(bpmRaw * 10) / 10,
     obpm: Math.round(offensiveRating * 10) / 10,
     dbpm: Math.round(defensiveRating * 10) / 10,
     reboundImpact: Math.round(reboundImpact * 10) / 10,
@@ -252,9 +256,9 @@ export const calculateVORP = (stats, teamStats = {}) => {
   if (minutes === 0) return 0;
 
   const bpm = calculateBPM(stats, teamStats);
-
   const vorpMultiplier = 1.2;
-  let vorp = (bpm * minutes) / 48 * vorpMultiplier;
+  const vorpRaw = (bpm * minutes) / 48 * vorpMultiplier;
+  let vorp = vorpRaw;
 
   const VORP_CAP = 10;
   if (Number.isFinite(vorp)) {
@@ -327,7 +331,9 @@ export const calculatePlayerMetrics = (stats, teamStats = {}) => {
     efg: Math.round(efg * 10) / 10,
     per: Math.round(per * 10) / 10,
     bpm: comps.bpm,
+    bpmRaw: comps.bpmRaw || 0,
     vorp: Math.round(vorp * 10) / 10,
+    vorpRaw: typeof vorp === 'number' ? Math.round(vorp * 10) / 10 : 0,
     obpm: comps.obpm,
     dbpm: comps.dbpm,
     metricsReliable,
