@@ -124,11 +124,15 @@ const LeaderboardScreen = () => {
             {game.location || 'Unknown'}
           </Text>
         </View>
-        <View style={styles.metricsContainer}>
-          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.VORP} />
+        <View style={styles.metricsContainerMultiple}>
+          <MetricBox label="PTS" value={game.stats?.pts} reliable={true} />
+          <MetricBox label="REB" value={(game.stats?.orb || 0) + (game.stats?.drb || 0)} reliable={true} />
+          <MetricBox label="AST" value={game.stats?.ast} reliable={true} />
+          <MetricBox label="MIN" value={game.stats?.min} reliable={true} />
+          <MetricBox label="BLK" value={game.stats?.blk} reliable={true} />
+          <MetricBox label="OBPM" value={game.metrics?.obpm} reliable={game.metrics?.metricsReliable} />
+          <MetricBox label="DBPM" value={game.metrics?.dbpm} reliable={game.metrics?.metricsReliable} />
           <MetricBox label="BPM" value={game.metrics?.bpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} />
-          <MetricBox label="TS%" value={game.metrics?.ts} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.TS} />
-          <MetricBox label="PTS" value={game.stats?.pts} reliable={true} highlight={sortBy === SORT_MODES.POINTS} />
         </View>
       </View>
       <TouchableOpacity
@@ -143,7 +147,7 @@ const LeaderboardScreen = () => {
   const MetricBox = ({ label, value, reliable = true, highlight }) => {
     const display = !reliable || value === undefined || value === null ? 'N/A' : Number(value).toFixed(1);
     return (
-      <View style={[styles.metricBox, highlight && styles.metricBoxHighlight]}>
+      <View style={[styles.metricBoxSmall, highlight && styles.metricBoxHighlight]}>
         <Text style={styles.metricLabel}>{label}</Text>
         <Text style={styles.metricValue}>{display}</Text>
       </View>
@@ -293,6 +297,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d0d0d',
     borderRadius: 8,
     padding: 6,
+    alignItems: 'center',
+  },
+  metricBoxSmall: {
+    width: 56,
+    backgroundColor: '#0d0d0d',
+    borderRadius: 8,
+    padding: 6,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  metricsContainerMultiple: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     alignItems: 'center',
   },
   metricBoxHighlight: {

@@ -173,6 +173,74 @@ export const calculateBPM = (stats, teamStats = {}) => {
 };
 
 /**
+ * Calculate BPM components (obpm/dbpm) and return components object
+ */
+export const calculateBPMComponents = (stats, teamStats = {}) => {
+  const {
+    pts = 0,
+    fga = 0,
+    fgm = 0,
+    threepm = 0,
+    fta = 0,
+    ftm = 0,
+    orb = 0,
+    drb = 0,
+    ast = 0,
+    stl = 0,
+    blk = 0,
+    tov = 0,
+    pf = 0,
+    min = 0,
+  } = stats || {};
+
+  const minutes = min && min > 0 ? min : (teamStats.estimatedMinutes || 0);
+  if (minutes === 0) {
+    return {
+      metricsReliable: false,
+      bpm: 0,
+      obpm: 0,
+      dbpm: 0,
+      reboundImpact: 0,
+      tovImpact: 0,
+    };
+  }
+
+  const possessions = teamStats.possessions || 100;
+  const per36AST = (ast / minutes) * 36;
+  const per36STL = (stl / minutes) * 36;
+  const per36BLK = (blk / minutes) * 36;
+  const per36TOV = (tov / minutes) * 36;
+  const per36REB = ((orb + drb) / minutes) * 36;
+
+  let offensiveRating = 0;
+  if (fga > 0) {
+    offensiveRating = (pts * 100) / (minutes * (possessions / 48));
+    offensiveRating += (per36AST * 0.5) / possessions;
+  }
+
+  let defensiveRating = (per36STL + per36BLK) * 2 - (pf / minutes) * 36;
+  let reboundImpact = (per36REB - LEAGUE_AVERAGE.drbRate * 36) * 0.5;
+  let tovImpact = -per36TOV * 0.5;
+
+  let bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
+
+  const BPM_CAP = 50;
+  if (Number.isFinite(bpm)) {
+    if (bpm > BPM_CAP) bpm = BPM_CAP;
+    if (bpm < -BPM_CAP) bpm = -BPM_CAP;
+  }
+
+  return {
+    metricsReliable: true,
+    bpm: Math.round(bpm * 10) / 10,
+    obpm: Math.round(offensiveRating * 10) / 10,
+    dbpm: Math.round(defensiveRating * 10) / 10,
+    reboundImpact: Math.round(reboundImpact * 10) / 10,
+    tovImpact: Math.round(tovImpact * 10) / 10,
+  };
+};
+
+/**
  * Calculate Value Over Replacement Player (VORP)
  * Measures how much better a player is than a replacement-level player
  */
@@ -207,16 +275,19 @@ export const calculatePlayerMetrics = (stats, teamStats = {}) => {
 
   const minutes = stats && stats.min && stats.min > 0 ? stats.min : (teamStats.estimatedMinutes || 0);
   const metricsReliable = minutes > 0;
-
-  const bpm = metricsReliable ? calculateBPM(stats, teamStats) : 0;
   const vorp = metricsReliable ? calculateVORP(stats, teamStats) : 0;
+
+  // Get BPM components (obpm/dbpm) if reliable
+  const comps = metricsReliable ? calculateBPMComponents(stats, teamStats) : { bpm: 0, obpm: 0, dbpm: 0, metricsReliable: false };
 
   return {
     ts: Math.round(ts * 10) / 10,
     efg: Math.round(efg * 10) / 10,
     per: Math.round(per * 10) / 10,
-    bpm: Math.round(bpm * 10) / 10,
+    bpm: comps.bpm,
     vorp: Math.round(vorp * 10) / 10,
+    obpm: comps.obpm,
+    dbpm: comps.dbpm,
     metricsReliable,
   };
 };
