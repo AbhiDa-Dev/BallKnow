@@ -263,8 +263,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
-    marginBottom: 12,
-    padding: 12,
+    marginBottom: 10,
+    padding: 10,
     alignItems: 'center',
     borderLeftColor: '#FFB81C',
     borderLeftWidth: 4,
@@ -275,9 +275,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rankBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#FFB81C',
     justifyContent: 'center',
     alignItems: 'center',
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   },
   rankText: {
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 14,
     color: '#000',
   },
   playerInfo: {
@@ -313,12 +313,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   metricBoxSmall: {
-    width: 56,
+    width: 48,
     backgroundColor: '#0d0d0d',
     borderRadius: 8,
-    padding: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 2,
+    marginBottom: 4,
   },
   metricsContainerMultiple: {
     flexDirection: 'row',
@@ -331,13 +333,13 @@ const styles = StyleSheet.create({
     borderColor: '#FFB81C',
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#999',
     marginBottom: 2,
   },
   metricValue: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#fff',
   },
   deleteButton: {
