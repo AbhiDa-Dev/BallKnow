@@ -243,6 +243,9 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       return;
     }
 
+    if (saving) return;
+    setSaving(true);
+
     let saved = 0;
     let failed = 0;
 
@@ -253,12 +256,23 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           pts: calculateTotalPTS(player.stats),
         };
 
-        await saveGame({
-          playerName: player.name,
-          location: location.trim(),
-          stats: gameStats,
-          teamStats: { possessions: 100 },
-        });
+        if (player.savedGameId) {
+          // update existing saved game in-session
+          await updateGame(player.savedGameId, {
+            stats: gameStats,
+            teamStats: { possessions: 100 },
+          });
+        } else {
+          const result = await saveGame({
+            playerName: player.name,
+            location: location.trim(),
+            stats: gameStats,
+            teamStats: { possessions: 100 },
+          });
+          // remember saved id for this session to prevent duplicates
+          setPlayers((prev) => prev.map((p) => (p.id === player.id ? { ...p, savedGameId: result.id } : p)));
+        }
+
         saved++;
       } catch (error) {
         failed++;
@@ -266,19 +280,11 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       }
     }
 
-    Alert.alert(
-      'Game Saved',
-      `${saved} player(s) saved${failed > 0 ? `, ${failed} failed` : ''}`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setSaveModalVisible(false);
-            resetGame();
-          },
-        },
-      ]
-    );
+    setSaving(false);
+    setSaveModalVisible(false);
+    resetGame();
+
+    Alert.alert('Game Saved', `${saved} player(s) saved${failed > 0 ? `, ${failed} failed` : ''}`);
   };
 
   // Flexible shot button that can track different stat keys
