@@ -32,10 +32,12 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [teamModalVisible, setTeamModalVisible] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState(null);
-  const debugMode = typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('ballknow_debug');
+  // Always attempt to read bpm debug data; Save modal will display it unconditionally
   let bpmDebug = null;
   try {
-    if (debugMode) bpmDebug = JSON.parse(window.localStorage.getItem('ballknow_bpm_debug') || 'null');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      bpmDebug = JSON.parse(window.localStorage.getItem('ballknow_bpm_debug') || 'null');
+    }
   } catch (e) {
     bpmDebug = null;
   }
@@ -951,15 +953,13 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 )}
               />
 
-              {debugMode && (
-                <>
-                  <Text style={styles.modalLabel}>Debug: Team Stats (computed)</Text>
-                  <Text style={styles.debugBox}>{JSON.stringify(buildTeamStats(players), null, 2)}</Text>
+              <>
+                <Text style={styles.modalLabel}>Debug: Team Stats (computed)</Text>
+                <Text style={styles.debugBox}>{JSON.stringify(buildTeamStats(players), null, 2)}</Text>
 
-                  <Text style={styles.modalLabel}>Debug: BPM Raw</Text>
-                  <Text style={styles.debugBox}>{bpmDebug ? JSON.stringify(bpmDebug, null, 2) : 'No bpm debug available'}</Text>
-                </>
-              )}
+                <Text style={styles.modalLabel}>Debug: BPM Raw</Text>
+                <Text style={styles.debugBox}>{bpmDebug ? JSON.stringify(bpmDebug, null, 2) : 'No bpm debug available'}</Text>
+              </>
 
               <TouchableOpacity style={styles.modalSaveAllButton} onPress={handleSaveAll}>
                 <MaterialCommunityIcons name="check" size={20} color="#000" />
