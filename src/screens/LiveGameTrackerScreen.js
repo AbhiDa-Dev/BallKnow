@@ -452,7 +452,15 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       <View style={styles.statsHeader}>
         <View style={styles.headerStat}>
           <Text style={styles.headerStatLabel}>MIN</Text>
-          <Text style={styles.headerStatValue}>{activePlayer.stats.min}</Text>
+          <TextInput
+            style={styles.headerStatInput}
+            keyboardType="numeric"
+            value={(activePlayer.stats.min || 0).toString()}
+            onChangeText={(text) => {
+              const parsed = parseInt(text.replace(/[^0-9]/g, ''), 10);
+              updatePlayerStat(activePlayerId, 'min', Number.isNaN(parsed) ? 0 : parsed);
+            }}
+          />
           <View style={styles.headerStatButtons}>
             <TouchableOpacity
               onPress={() => decrementPlayerStat(activePlayerId, 'min')}
@@ -872,6 +880,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  headerStatInput: {
+    color: '#FFB81C',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 4,
+    padding: 0,
+    textAlign: 'center',
+    minWidth: 44,
   },
   headerStatButtons: {
     flexDirection: 'row',
