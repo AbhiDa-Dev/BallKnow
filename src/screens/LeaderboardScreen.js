@@ -130,9 +130,14 @@ const LeaderboardScreen = () => {
           <MetricBox label="AST" value={game.stats?.ast} reliable={true} />
           <MetricBox label="MIN" value={game.stats?.min} reliable={true} />
           <MetricBox label="BLK" value={game.stats?.blk} reliable={true} />
+          <MetricBox label="FT" value={`${game.stats?.ftm || 0}/${game.stats?.fta || 0}`} reliable={true} />
+          <MetricBox label="FT%" value={game.metrics?.ftPct} reliable={game.metrics?.metricsReliable} />
+          <MetricBox label="PF" value={game.stats?.pf} reliable={true} />
           <MetricBox label="OBPM" value={game.metrics?.obpm} reliable={game.metrics?.metricsReliable} />
           <MetricBox label="DBPM" value={game.metrics?.dbpm} reliable={game.metrics?.metricsReliable} />
           <MetricBox label="BPM" value={game.metrics?.bpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} />
+          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} />
+          <MetricBox label="GSC" value={game.metrics?.gameScore} reliable={game.metrics?.metricsReliable} />
         </View>
       </View>
       <TouchableOpacity
@@ -145,7 +150,15 @@ const LeaderboardScreen = () => {
   );
 
   const MetricBox = ({ label, value, reliable = true, highlight }) => {
-    const display = !reliable || value === undefined || value === null ? 'N/A' : Number(value).toFixed(1);
+    let display;
+    if (!reliable || value === undefined || value === null) {
+      display = 'N/A';
+    } else if (typeof value === 'string') {
+      display = value;
+    } else {
+      display = Number(value).toFixed(1);
+    }
+
     return (
       <View style={[styles.metricBoxSmall, highlight && styles.metricBoxHighlight]}>
         <Text style={styles.metricLabel}>{label}</Text>

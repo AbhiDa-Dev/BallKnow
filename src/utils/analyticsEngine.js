@@ -266,6 +266,42 @@ export const calculateVORP = (stats, teamStats = {}) => {
 };
 
 /**
+ * Calculate Game Score (Hollinger's Game Score approximation)
+ * gameScore = PTS + 0.4*FGM - 0.7*FGA - 0.4*(FTA - FTM) + 0.7*ORB + 0.3*DRB + STL + 0.7*AST + 0.7*BLK - 0.4*PF - TOV
+ */
+export const calculateGameScore = (stats = {}) => {
+  const {
+    pts = 0,
+    fgm = 0,
+    fga = 0,
+    ftm = 0,
+    fta = 0,
+    orb = 0,
+    drb = 0,
+    stl = 0,
+    ast = 0,
+    blk = 0,
+    pf = 0,
+    tov = 0,
+  } = stats;
+
+  const gs =
+    pts +
+    0.4 * fgm -
+    0.7 * fga -
+    0.4 * (fta - ftm) +
+    0.7 * orb +
+    0.3 * drb +
+    stl +
+    0.7 * ast +
+    0.7 * blk -
+    0.4 * pf -
+    tov;
+
+  return Math.round(gs * 10) / 10;
+};
+
+/**
  * Calculate all metrics for a player game session
  */
 export const calculatePlayerMetrics = (stats, teamStats = {}) => {
@@ -280,6 +316,12 @@ export const calculatePlayerMetrics = (stats, teamStats = {}) => {
   // Get BPM components (obpm/dbpm) if reliable
   const comps = metricsReliable ? calculateBPMComponents(stats, teamStats) : { bpm: 0, obpm: 0, dbpm: 0, metricsReliable: false };
 
+  // Free throw percentage
+  const ftPct = stats.fta && stats.fta > 0 ? Math.round((stats.ftm / stats.fta) * 1000) / 10 : null;
+
+  // Game score
+  const gameScore = calculateGameScore(stats || {});
+
   return {
     ts: Math.round(ts * 10) / 10,
     efg: Math.round(efg * 10) / 10,
@@ -289,6 +331,8 @@ export const calculatePlayerMetrics = (stats, teamStats = {}) => {
     obpm: comps.obpm,
     dbpm: comps.dbpm,
     metricsReliable,
+    ftPct,
+    gameScore,
   };
 };
 
