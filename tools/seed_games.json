@@ -1,0 +1,74 @@
+[
+  {
+    "id": "seed-zero-min",
+    "playerName": "SeedZero",
+    "location": "Gym A",
+    "createdAt": "2026-05-10T14:26:10.798Z",
+    "stats": {
+      "min": 0,
+      "fgm": 2,
+      "fga": 2,
+      "threepm": 1,
+      "threeepa": 1,
+      "ftm": 1,
+      "fta": 1,
+      "orb": 0,
+      "drb": 0,
+      "ast": 0,
+      "stl": 0,
+      "blk": 0,
+      "tov": 0,
+      "pf": 0,
+      "pts": 6
+    },
+    "teamStats": {
+      "possessions": 100,
+      "gameDurationMinutes": 40,
+      "playersCount": 5
+    },
+    "metrics": {
+      "ts": 123,
+      "efg": 125,
+      "per": 6.2,
+      "bpm": 0,
+      "vorp": 0,
+      "metricsReliable": false
+    }
+  },
+  {
+    "id": "seed-12-min",
+    "playerName": "SeedTwelve",
+    "location": "Gym A",
+    "createdAt": "2026-05-10T14:26:10.802Z",
+    "stats": {
+      "min": 12,
+      "fgm": 4,
+      "fga": 8,
+      "threepm": 1,
+      "threeepa": 3,
+      "ftm": 2,
+      "fta": 2,
+      "orb": 1,
+      "drb": 4,
+      "ast": 3,
+      "stl": 1,
+      "blk": 0,
+      "tov": 1,
+      "pf": 1,
+      "pts": 11
+    },
+    "teamStats": {
+      "possessions": 100,
+      "gameDurationMinutes": 40,
+      "playersCount": 5
+    },
+    "metrics": {
+      "ts": 61.9,
+      "efg": 56.3,
+      "per": 1.2,
+      "bpm": 39.9,
+      "vorp": 10,
+      "metricsReliable": true
+    }
+  }
+]
