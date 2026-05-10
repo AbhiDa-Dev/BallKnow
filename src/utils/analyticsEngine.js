@@ -130,6 +130,33 @@ export const calculateBPM = (stats, teamStats) => {
   // Combined BPM = Offensive + Defensive + Rebounding + Turnover
   const bpm = offensiveRating + defensiveRating + reboundImpact + tovImpact;
 
+  // Debug: log intermediate values when running in dev
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('ballknow_debug')) {
+      console.debug('BPM Debug', {
+        stats,
+        teamStats,
+        minutes,
+        possessions,
+        per36Pts,
+        per36AST,
+        per36STL,
+        per36BLK,
+        per36TOV,
+        per36REB,
+        efg,
+        ts,
+        offensiveRating,
+        defensiveRating,
+        reboundImpact,
+        tovImpact,
+        bpmRaw: bpm,
+      });
+    }
+  } catch (e) {
+    // ignore
+  }
+
   return Math.round(bpm * 10) / 10;
 };
 
