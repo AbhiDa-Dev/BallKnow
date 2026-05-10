@@ -28,6 +28,10 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState('');
+  const [teams, setTeams] = useState([]);
+  const [teamModalVisible, setTeamModalVisible] = useState(false);
+  const [teamNameInput, setTeamNameInput] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
 
   // Default stat structure for a player
   const createEmptyStats = () => ({
@@ -107,12 +111,69 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       id: Date.now().toString(),
       name: newPlayerName.trim(),
       stats: createEmptyStats(),
+      teamId: selectedTeamId,
     };
 
     setPlayers([...players, newPlayer]);
     setActivePlayerId(newPlayer.id);
     setNewPlayerName('');
     setAddPlayerModalVisible(false);
+  };
+
+  const addTeam = () => {
+    if (!teamNameInput.trim()) {
+      Alert.alert('Error', 'Please enter team name');
+      return;
+    }
+    const newTeam = { id: Date.now().toString(), name: teamNameInput.trim() };
+    setTeams((prev) => [...prev, newTeam]);
+    setTeamNameInput('');
+    setTeamModalVisible(false);
+  };
+
+  const removeTeam = (teamId) => {
+    // remove team and clear teamId from players
+    setTeams((prev) => prev.filter((t) => t.id !== teamId));
+    setPlayers((prev) => prev.map((p) => (p.teamId === teamId ? { ...p, teamId: null } : p)));
+  };
+
+  const addPlayerToTeam = (teamId, playerName) => {
+    const newPlayer = {
+      id: Date.now().toString(),
+      name: (playerName && playerName.trim()) || `Player ${Date.now()}`,
+      stats: createEmptyStats(),
+      teamId,
+    };
+    setPlayers((prev) => [...prev, newPlayer]);
+  };
+
+  const fillTeamWithFiller = (teamId, count = 5) => {
+    const filler = [];
+    for (let i = 0; i < count; i++) {
+      const id = Date.now().toString() + i;
+      filler.push({
+        id,
+        name: `Filler ${i + 1}`,
+        teamId,
+        stats: {
+          min: 20,
+          fgm: Math.floor(Math.random() * 8),
+          fga: Math.floor(Math.random() * 18) + 1,
+          threepm: Math.floor(Math.random() * 4),
+          threeepa: Math.floor(Math.random() * 8),
+          ftm: Math.floor(Math.random() * 5),
+          fta: Math.floor(Math.random() * 6),
+          orb: Math.floor(Math.random() * 3),
+          drb: Math.floor(Math.random() * 6),
+          ast: Math.floor(Math.random() * 6),
+          stl: Math.floor(Math.random() * 3),
+          blk: Math.floor(Math.random() * 2),
+          tov: Math.floor(Math.random() * 4),
+          pf: Math.floor(Math.random() * 4),
+        },
+      });
+    }
+    setPlayers((prev) => [...prev, ...filler]);
   };
 
   const removePlayer = (playerId) => {
@@ -465,6 +526,14 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.playerList}
         >
+          <TouchableOpacity
+            style={styles.teamButton}
+            onPress={() => setTeamModalVisible(true)}
+          >
+            <MaterialCommunityIcons name="account-group" size={20} color="#FFB81C" />
+            <Text style={styles.teamButtonText}>Teams</Text>
+          </TouchableOpacity>
+
           {players.map((player) => (
             <TouchableOpacity
               key={player.id}
@@ -500,6 +569,70 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+        {/* Teams Modal */}
+        <Modal visible={teamModalVisible} transparent animationType="slide">
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Teams</Text>
+                <TouchableOpacity onPress={() => setTeamModalVisible(false)}>
+                  <MaterialCommunityIcons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.modalBody}>
+                <Text style={styles.modalLabel}>Create Team</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Team name"
+                  placeholderTextColor="#666"
+                  value={teamNameInput}
+                  onChangeText={setTeamNameInput}
+                />
+                <TouchableOpacity style={styles.modalAddButton} onPress={addTeam}>
+                  <Text style={styles.modalAddButtonText}>Add Team</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.modalLabel, { marginTop: 20 }]}>Existing Teams</Text>
+                {teams.map((t) => (
+                  <View key={t.id} style={styles.playerSaveItem}>
+                    <View>
+                      <Text style={styles.playerSaveItemName}>{t.name}</Text>
+                      <Text style={styles.playerSaveItemStats}>{players.filter(p => p.teamId === t.id).length} players</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => addPlayerToTeam(t.id)}
+                      >
+                        <MaterialCommunityIcons name="plus" size={18} color="#FFB81C" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => fillTeamWithFiller(t.id, 5)}
+                      >
+                        <MaterialCommunityIcons name="dice-multiple" size={18} color="#FFB81C" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.saveSingleButton}
+                        onPress={() => removeTeam(t.id)}
+                      >
+                        <MaterialCommunityIcons name="trash-can" size={18} color="#ff6b6b" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { marginTop: 12 }]}
+                  onPress={() => setTeamModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelButtonText}>Done</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        </Modal>
 
       {/* Stats Header */}
       <View style={styles.statsHeader}>
@@ -1268,6 +1401,23 @@ const styles = StyleSheet.create({
   },
   saveSingleButton: {
     padding: 8,
+  },
+  teamButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#111',
+  },
+  teamButtonText: {
+    color: '#FFB81C',
+    fontWeight: '600',
+    marginLeft: 6,
   },
 });
 
