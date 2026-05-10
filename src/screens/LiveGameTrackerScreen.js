@@ -185,6 +185,27 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     setPlayers((prev) => [...prev, ...filler]);
   };
 
+  // Edit existing player: rename, assign/unassign, delete
+  const [editPlayerModalVisible, setEditPlayerModalVisible] = useState(false);
+  const [editPlayerId, setEditPlayerId] = useState(null);
+  const [editPlayerNameInput, setEditPlayerNameInput] = useState('');
+
+  const openEditPlayerModal = (player) => {
+    setEditPlayerId(player.id);
+    setEditPlayerNameInput(player.name || '');
+    setEditPlayerModalVisible(true);
+  };
+
+  const editPlayerName = (playerId, name) => {
+    setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, name: name } : p)));
+  };
+
+  const assignPlayerToTeam = (playerId, teamId) => {
+    setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, teamId } : p)));
+  };
+
+  const unassignPlayer = (playerId) => assignPlayerToTeam(playerId, null);
+
   const removePlayer = (playerId) => {
     const updatedPlayers = players.filter((p) => p.id !== playerId);
     setPlayers(updatedPlayers);
@@ -551,16 +572,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 activePlayerId === player.id && styles.playerCardActive,
               ]}
               onPress={() => setActivePlayerId(player.id)}
-              onLongPress={() => {
-                Alert.alert(`Remove ${player.name}?`, '', [
-                  { text: 'Cancel' },
-                  {
-                    text: 'Remove',
-                    onPress: () => removePlayer(player.id),
-                    style: 'destructive',
-                  },
-                ]);
-              }}
+              onLongPress={() => openEditPlayerModal(player)}
             >
               <Text style={styles.playerCardName}>{player.name}</Text>
               <Text style={styles.playerCardPoints}>
@@ -898,6 +910,73 @@ const LiveGameTrackerScreen = ({ navigation }) => {
               />
               <TouchableOpacity style={styles.modalAddButton} onPress={addPlayer}>
                 <Text style={styles.modalAddButtonText}>Add Player</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Edit Player Modal */}
+      <Modal visible={editPlayerModalVisible} transparent animationType="slide">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Player</Text>
+              <TouchableOpacity onPress={() => setEditPlayerModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalLabel}>Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editPlayerNameInput}
+                onChangeText={setEditPlayerNameInput}
+              />
+
+              <Text style={styles.modalLabel}>Assign to Team</Text>
+              {teams.length === 0 && <Text style={{ color: '#888' }}>No teams created</Text>}
+              {teams.map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.saveSingleButton, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                  onPress={() => assignPlayerToTeam(editPlayerId, t.id)}
+                >
+                  <MaterialCommunityIcons name="account" size={16} color="#FFB81C" />
+                  <Text style={{ color: '#fff' }}>{t.name}</Text>
+                </TouchableOpacity>
+              ))}
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.modalAddButton, { flex: 1, backgroundColor: '#ff6b6b' }]}
+                  onPress={() => {
+                    removePlayer(editPlayerId);
+                    setEditPlayerModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalAddButtonText}>Delete Player</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { flex: 1 }]}
+                  onPress={() => {
+                    // Save edits
+                    if (editPlayerId) {
+                      editPlayerName(editPlayerId, editPlayerNameInput.trim() || 'Unnamed');
+                    }
+                    setEditPlayerModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalCancelButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCancelButton, { marginTop: 12 }]}
+                onPress={() => {
+                  if (editPlayerId) unassignPlayer(editPlayerId);
+                }}
+              >
+                <Text style={styles.modalCancelButtonText}>Unassign from Team</Text>
               </TouchableOpacity>
             </View>
           </View>
