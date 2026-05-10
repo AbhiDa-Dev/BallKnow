@@ -32,6 +32,13 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [teamModalVisible, setTeamModalVisible] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const debugMode = typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('ballknow_debug');
+  let bpmDebug = null;
+  try {
+    if (debugMode) bpmDebug = JSON.parse(window.localStorage.getItem('ballknow_bpm_debug') || 'null');
+  } catch (e) {
+    bpmDebug = null;
+  }
 
   // Default stat structure for a player
   const createEmptyStats = () => ({
@@ -944,6 +951,16 @@ const LiveGameTrackerScreen = ({ navigation }) => {
                 )}
               />
 
+              {debugMode && (
+                <>
+                  <Text style={styles.modalLabel}>Debug: Team Stats (computed)</Text>
+                  <Text style={styles.debugBox}>{JSON.stringify(buildTeamStats(players), null, 2)}</Text>
+
+                  <Text style={styles.modalLabel}>Debug: BPM Raw</Text>
+                  <Text style={styles.debugBox}>{bpmDebug ? JSON.stringify(bpmDebug, null, 2) : 'No bpm debug available'}</Text>
+                </>
+              )}
+
               <TouchableOpacity style={styles.modalSaveAllButton} onPress={handleSaveAll}>
                 <MaterialCommunityIcons name="check" size={20} color="#000" />
                 <Text style={styles.modalSaveAllButtonText}>Save All Players</Text>
@@ -1339,6 +1356,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     marginBottom: 12,
+  },
+  debugBox: {
+    backgroundColor: '#0f0f0f',
+    borderColor: '#222',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginBottom: 12,
+    maxHeight: 160,
   },
   modalAddButton: {
     backgroundColor: '#FFB81C',
