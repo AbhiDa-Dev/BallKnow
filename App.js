@@ -10,7 +10,8 @@ import { StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
-import GameEditorScreen from './src/screens/GameEditorScreen';
+// GameEditorScreen removed — tab was unstable
+// import GameEditorScreen from './src/screens/GameEditorScreen';
 import LiveGameTrackerScreen from './src/screens/LiveGameTrackerScreen';
 
 const Tab = createBottomTabNavigator();
@@ -67,18 +68,7 @@ export default function App() {
             headerShown: true,
           }}
         />
-        <Tab.Screen
-          name="GameEditor"
-          component={GameEditorScreen}
-          options={{
-            title: 'Log Game',
-            tabBarLabel: 'Log Game',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="pencil" color={color} size={size} />
-            ),
-            headerShown: true,
-          }}
-        />
+        {/* Log Game tab removed — use Live Tracker to record games */}
       </Tab.Navigator>
     </NavigationContainer>
   );
