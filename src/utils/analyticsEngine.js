@@ -121,7 +121,7 @@ export const calculatePER = (stats) => {
 
   let offensiveRating = 0;
   if (fga > 0) {
-    offensiveRating = (pts * 100) / (min * (possessions / 48));
+    offensiveRating = (pts * 100) / (minutes * (possessions / 48));
     offensiveRating += (per36AST * 0.5) / possessions;
   }
 
