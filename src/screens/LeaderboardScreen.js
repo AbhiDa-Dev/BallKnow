@@ -125,7 +125,7 @@ const LeaderboardScreen = () => {
           </Text>
         </View>
         <View style={styles.metricsContainerMultiple}>
-          <MetricBox label="PTS" value={game.stats?.pts} reliable={true} />
+          <MetricBox label="PTS" value={game.stats?.pts} reliable={true} highlight={sortBy === SORT_MODES.POINTS} />
           <MetricBox label="REB" value={(game.stats?.orb || 0) + (game.stats?.drb || 0)} reliable={true} />
           <MetricBox label="AST" value={game.stats?.ast} reliable={true} />
           <MetricBox label="MIN" value={game.stats?.min} reliable={true} />
@@ -136,8 +136,8 @@ const LeaderboardScreen = () => {
           <MetricBox label="OBPM" value={game.metrics?.obpm} reliable={game.metrics?.metricsReliable} />
           <MetricBox label="DBPM" value={game.metrics?.dbpm} reliable={game.metrics?.metricsReliable} />
           <MetricBox label="BPM" value={game.metrics?.bpm} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.BPM} />
-          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} />
-          <MetricBox label="GSC" value={game.metrics?.gameScore} reliable={game.metrics?.metricsReliable} />
+          <MetricBox label="VORP" value={game.metrics?.vorp} reliable={game.metrics?.metricsReliable} highlight={sortBy === SORT_MODES.VORP} />
+          <MetricBox label="GSC" value={game.metrics?.gameScore} reliable={game.metrics?.metricsReliable} highlight={false} />
         </View>
       </View>
       <TouchableOpacity

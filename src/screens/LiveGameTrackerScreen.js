@@ -17,7 +17,7 @@ import {
   FlatList,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { saveGame } from '../services/storageService';
+import { saveGame, updateGame } from '../services/storageService';
 
 const LiveGameTrackerScreen = ({ navigation }) => {
   const [players, setPlayers] = useState([]);
@@ -25,6 +25,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [location, setLocation] = useState('');
 
   // Default stat structure for a player
@@ -198,23 +199,41 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       return;
     }
 
+    if (saving) return; // prevent duplicate clicks
+    setSaving(true);
     try {
       const gameStats = {
         ...playerToSave.stats,
         pts: calculateTotalPTS(playerToSave.stats),
       };
 
-      const savedGame = await saveGame({
-        playerName: playerToSave.name,
-        location: location.trim(),
-        stats: gameStats,
-        teamStats: { possessions: 100 },
-      });
-      console.log('LiveTracker saved game:', savedGame.id, savedGame);
+      let result;
+      // If this player has a savedGameId, update instead of creating a duplicate
+      if (playerToSave.savedGameId) {
+        result = await updateGame(playerToSave.savedGameId, {
+          stats: gameStats,
+          teamStats: { possessions: 100 },
+        });
+        console.log('LiveTracker updated game:', result.id, result);
+      } else {
+        result = await saveGame({
+          playerName: playerToSave.name,
+          location: location.trim(),
+          stats: gameStats,
+          teamStats: { possessions: 100 },
+        });
+        console.log('LiveTracker saved new game:', result.id, result);
+        // store saved id to avoid future duplicates
+        setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, savedGameId: result.id } : p)));
+      }
 
+      // Close the Save modal so user sees immediate feedback
+      setSaveModalVisible(false);
       Alert.alert('Success', `${playerToSave.name}'s game saved!`);
     } catch (error) {
       Alert.alert('Error', 'Failed to save game: ' + error.message);
+    } finally {
+      setSaving(false);
     }
   };
 
