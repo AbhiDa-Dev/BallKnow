@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { saveGame, updateGame } from '../services/storageService';
+import { calculateTeamPossessions } from '../utils/analyticsEngine';
 
 const LiveGameTrackerScreen = ({ navigation }) => {
   const [players, setPlayers] = useState([]);
@@ -47,6 +48,54 @@ const LiveGameTrackerScreen = ({ navigation }) => {
     tov: 0,      // Turnovers
     pf: 0,       // Personal Fouls
   });
+
+  const buildTeamStats = (playersList) => {
+    const playersCount = playersList.length || 1;
+    let fga = 0;
+    let orb = 0;
+    let tov = 0;
+    let fta = 0;
+    let minutesSum = 0;
+    let maxMin = 0;
+
+    playersList.forEach((p) => {
+      const s = p.stats || {};
+      fga += s.fga || 0;
+      orb += (s.orb || 0) + (s.drb || 0);
+      tov += s.tov || 0;
+      fta += s.fta || 0;
+      const m = s.min || 0;
+      minutesSum += m;
+      if (m > maxMin) maxMin = m;
+    });
+
+    const teamStats = {
+      fga,
+      orb,
+      tov,
+      fta,
+      playersCount,
+    };
+
+    // If players provided minutes, use average as estimatedMinutes for analytics
+    if (minutesSum > 0) {
+      teamStats.estimatedMinutes = Math.max(1, Math.round(minutesSum / playersCount));
+    }
+
+    // If there is a clear game duration (max minutes), set it
+    if (maxMin > 0) {
+      teamStats.gameDurationMinutes = maxMin;
+    }
+
+    // Derive possessions estimate
+    try {
+      teamStats.possessions = calculateTeamPossessions(teamStats);
+    } catch (e) {
+      teamStats.possessions = 100;
+    }
+
+    return teamStats;
+  };
 
   const addPlayer = () => {
     if (!newPlayerName.trim()) {
@@ -208,11 +257,14 @@ const LiveGameTrackerScreen = ({ navigation }) => {
       };
 
       let result;
+      // Build teamStats from current players for better BPM/VORP accuracy
+      const teamStats = buildTeamStats(players);
+
       // If this player has a savedGameId, update instead of creating a duplicate
       if (playerToSave.savedGameId) {
         result = await updateGame(playerToSave.savedGameId, {
           stats: gameStats,
-          teamStats: { possessions: 100 },
+          teamStats,
         });
         console.log('LiveTracker updated game:', result.id, result);
       } else {
@@ -220,7 +272,7 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           playerName: playerToSave.name,
           location: location.trim(),
           stats: gameStats,
-          teamStats: { possessions: 100 },
+          teamStats,
         });
         console.log('LiveTracker saved new game:', result.id, result);
         // store saved id to avoid future duplicates
@@ -256,18 +308,19 @@ const LiveGameTrackerScreen = ({ navigation }) => {
           pts: calculateTotalPTS(player.stats),
         };
 
+        const teamStats = buildTeamStats(players);
         if (player.savedGameId) {
           // update existing saved game in-session
           await updateGame(player.savedGameId, {
             stats: gameStats,
-            teamStats: { possessions: 100 },
+            teamStats,
           });
         } else {
           const result = await saveGame({
             playerName: player.name,
             location: location.trim(),
             stats: gameStats,
-            teamStats: { possessions: 100 },
+            teamStats,
           });
           // remember saved id for this session to prevent duplicates
           setPlayers((prev) => prev.map((p) => (p.id === player.id ? { ...p, savedGameId: result.id } : p)));
