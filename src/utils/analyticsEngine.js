@@ -72,25 +72,32 @@ export const calculatePER = (stats) => {
       pf * 0.1) /
     minutes;
 
-  return Math.round(perMin * 10) / 10;
-};
-
-/**
- * Calculate Box Plus-Minus (BPM)
- * On-court rating for player impact in points per 100 possessions
- */
-export const calculateBPM = (stats, teamStats) => {
-  const {
-    pts,
-    fga,
-    fgm,
-    threepm,
-    fta,
-    ftm,
-    orb,
-    drb,
-    ast,
-    stl,
+        const debugObj = {
+          stats,
+          teamStats,
+          minutes,
+          possessions,
+          per36Pts,
+          per36AST,
+          per36STL,
+          per36BLK,
+          per36TOV,
+          per36REB,
+          efg,
+          ts,
+          offensiveRating,
+          defensiveRating,
+          reboundImpact,
+          tovImpact,
+          bpmRaw: bpm,
+        };
+        console.debug('BPM Debug', debugObj);
+        try {
+          window.localStorage.setItem('ballknow_bpm_debug', JSON.stringify(debugObj));
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
     blk,
     tov,
     pf,
